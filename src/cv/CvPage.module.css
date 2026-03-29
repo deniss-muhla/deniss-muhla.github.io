@@ -1,0 +1,265 @@
+.page {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.sidebar {
+  position: sticky;
+  top: 108px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sideCard,
+.article {
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  box-shadow: var(--shadow-soft);
+}
+
+.sideCard {
+  padding: 22px;
+  background: var(--panel);
+  backdrop-filter: blur(18px);
+}
+
+.sideEyebrow {
+  margin: 0 0 12px;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.sideTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.8rem;
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+}
+
+.sideText {
+  margin: 14px 0 0;
+  color: var(--muted);
+  line-height: 1.72;
+}
+
+.actionList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.actionPrimary,
+.actionLink {
+  padding: 13px 16px;
+  border-radius: 18px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.actionPrimary:hover,
+.actionLink:hover,
+.actionPrimary:focus-visible,
+.actionLink:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-soft);
+}
+
+.actionPrimary {
+  background: linear-gradient(135deg, var(--accent), #9b3348);
+  color: #fff8f2;
+}
+
+.actionLink {
+  border: 1px solid rgba(123, 33, 51, 0.14);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.factList {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.factRow {
+  padding: 12px 0;
+  border-top: 1px solid rgba(123, 33, 51, 0.12);
+}
+
+.factRow:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.factLabel,
+.factValue {
+  margin: 0;
+}
+
+.factLabel {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.factValue {
+  margin-top: 8px;
+  font-size: 0.96rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.article {
+  padding: clamp(24px, 4vw, 40px);
+  background: var(--panel-strong);
+}
+
+.markdown :global(*) {
+  max-width: 100%;
+}
+
+.markdown :global(h1),
+.markdown :global(h2),
+.markdown :global(h3) {
+  margin-top: 0;
+  color: var(--ink);
+}
+
+.markdown :global(h1),
+.markdown :global(h2),
+.markdown :global(h3) {
+  font-family: var(--font-display);
+  letter-spacing: -0.04em;
+}
+
+.markdown :global(h1) {
+  margin-bottom: 12px;
+  font-size: clamp(2.6rem, 5vw, 4rem);
+  line-height: 0.96;
+}
+
+.markdown :global(h2) {
+  margin-top: 28px;
+  margin-bottom: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(123, 33, 51, 0.14);
+  color: var(--accent);
+  font-size: 1.05rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.markdown :global(h3) {
+  margin-top: 20px;
+  margin-bottom: 8px;
+  font-size: 1.35rem;
+  line-height: 1.12;
+}
+
+.markdown :global(p),
+.markdown :global(li),
+.markdown :global(td),
+.markdown :global(th) {
+  color: var(--muted);
+}
+
+.markdown :global(p) {
+  margin: 0 0 14px;
+  line-height: 1.75;
+}
+
+.markdown :global(strong) {
+  color: var(--ink);
+}
+
+.markdown :global(blockquote) {
+  margin: 20px 0 24px;
+  padding: 16px 18px;
+  border-left: 4px solid var(--accent);
+  border-radius: 18px;
+  background: rgba(123, 33, 51, 0.06);
+}
+
+.markdown :global(blockquote p) {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.02rem;
+}
+
+.markdown :global(ul),
+.markdown :global(ol) {
+  margin: 0 0 16px;
+  padding-left: 20px;
+}
+
+.markdown :global(li + li) {
+  margin-top: 6px;
+}
+
+.markdown :global(a) {
+  color: var(--accent);
+}
+
+.markdown :global(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 18px;
+  border: 1px solid rgba(123, 33, 51, 0.12);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.markdown :global(th),
+.markdown :global(td) {
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(123, 33, 51, 0.1);
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown :global(th) {
+  background: rgba(123, 33, 51, 0.06);
+  color: var(--ink);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.markdown :global(tr:last-child td) {
+  border-bottom: 0;
+}
+
+@media (max-width: 1040px) {
+  .page {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: static;
+  }
+}
+
+@media (max-width: 720px) {
+  .article,
+  .sideCard {
+    padding: 20px;
+  }
+
+  .markdown :global(h1) {
+    font-size: 2.3rem;
+  }
+}
