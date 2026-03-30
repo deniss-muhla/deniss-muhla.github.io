@@ -118,8 +118,8 @@ Stream Labs built products around video and audio content delivery, including ar
 
 ## Interests
 
-- Travelling and hiking with family
+- Traveling and hiking with family
 - Ice skating and rollerblading
 - Reading
+- Exploring latest AI-generated audio, image, video, and text capabilities
 - Exploring Linux distros
-- Experimenting with generative AI, especially image models and LLMs
