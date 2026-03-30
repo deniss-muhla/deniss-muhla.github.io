@@ -1,6 +1,6 @@
 export const profile = {
   name: "Deniss Muhla",
-  role: "Lead Front-end Engineer",
+  role: "Senior Front-end Engineer",
   location: "Latvia, EU",
   tagline:
     "I build front-end systems that teams can scale without losing the craft.",
@@ -12,5 +12,5 @@ export const profile = {
 export const focus = [
   "Design systems",
   "React & Web Components",
-  "Agentic workflows",
+  "AI-assisted tooling",
 ];

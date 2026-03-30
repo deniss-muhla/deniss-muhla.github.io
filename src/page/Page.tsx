@@ -78,9 +78,11 @@ export function Page() {
           </h1>
           <hr className={styles.heroRule} />
           <p className={styles.heroBio}>
-            Lead front-end engineer building design systems, React platforms,
-            and agentic workflows. Eighteen years shaping interfaces across
-            European and North&nbsp;American products.
+            Senior front-end engineer building design systems, React platforms,
+            and AI-assisted tooling.
+            <br />
+            Nineteen years shaping interfaces across European and North American
+            products.
           </p>
 
           <nav className={styles.heroLinks}>

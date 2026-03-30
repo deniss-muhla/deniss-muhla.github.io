@@ -5,7 +5,7 @@ Latvia, EU
 Email: [deniss.muhla@gmail.com](mailto:deniss.muhla@gmail.com)  
 Phone / WhatsApp: +371 29966072
 
-> Front-end engineer focused on design systems, Web Components, scalable UI architecture, and practical AI-assisted engineering workflows. I bring more than 18 years of software engineering experience across European and North-American products, with hands-on depth in JavaScript, TypeScript, React, and C#.
+> Front-end engineer focused on design systems, Web Components, scalable UI architecture, and practical AI-assisted engineering workflows. I bring more than 19 years of software engineering experience across European and North-American products, with hands-on depth in JavaScript, TypeScript, React, and C#.
 
 ## Profile
 
@@ -15,8 +15,7 @@ I work best where product delivery, component architecture, and developer experi
 
 - Design systems built around atomic, modular and accessible components with clear adoption paths.
 - React, TypeScript, Web Components, and Vite-based front-end platforms.
-- MCP, agent skills, and structured LLM context orchestration for real engineering workflows.
-- Acting as an ambassador and innovation driver for agentic coding inside the team, including creating a reusable skill for design-system scaffolding and integration.
+- MCP, agent skills, and structured LLM context orchestration for real engineering workflows; acting as an innovation driver for agentic coding inside the team, including creating reusable skills for design-system scaffolding and integration.
 
 ## Experience
 
@@ -58,7 +57,7 @@ Stream Labs built products around video and audio content delivery, including ar
 ### DiatomEnterprises | Software Developer | Riga / Daugavpils | Jan 2007 - Jan 2010
 
 - Built and maintained features across multiple projects, including a CRM for real estate workflows.
-- Developed controllable widgets that made it easier for sales managers to add and update client banner content.
+- Developed configurable widgets that made it easier for sales managers to add and update client banner content.
 - Improved the speed and flexibility of publishing customer-facing information.
 
 **Stack:** C#, JavaScript, Jira
@@ -70,7 +69,7 @@ Stream Labs built products around video and audio content delivery, including ar
 - Technical leadership
 - Delivery under constraints
 - Cross-team communication
-- Fast learning
+- Fast learner
 
 ## Technology Stack
 
@@ -81,7 +80,7 @@ Stream Labs built products around video and audio content delivery, including ar
 | React                   | Advanced     |
 | Node.js                 | Advanced     |
 | C# / .NET Framework     | Advanced     |
-| npm / yarn / pnpm / bun | Advanced     |
+| Package managers        | Advanced     |
 | Lit                     | Advanced     |
 | Web Components          | Advanced     |
 | GitHub Copilot          | Advanced     |
@@ -107,19 +106,11 @@ Stream Labs built products around video and audio content delivery, including ar
 
 - MCPS: Microsoft Certified Professional, issued Apr 2012
 - MCPD: Web Developer 4, issued May 2011
-- Certification number D261-6486, Web Developer 4
-- Certification number B862-8694, ASP.NET Developer 3.5
-- Certification number B862-8690, Web Developer
-- Certification number D261-6487, .NET Framework 4, Data Access
-- Certification number D261-6488, .NET Framework 4, Service Communication Applications
-- Certification number D261-6485, .NET Framework 4, Web Applications
-- Certification number B862-8693, .NET Framework 3.5, ASP.NET Applications
-- Certification number B862-8691, .NET Framework 2.0, Web Applications
 
 ## Interests
 
 - Traveling and hiking with family
 - Ice skating and rollerblading
 - Reading
-- Exploring latest AI-generated audio, image, video, and text capabilities
+- Exploring the latest AI-generated audio, image, video, and text capabilities
 - Exploring Linux distros

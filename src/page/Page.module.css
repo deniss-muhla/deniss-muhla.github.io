@@ -177,7 +177,7 @@
   font-size: 0.84rem;
   line-height: 1.85;
   color: var(--ink-sub);
-  max-width: 46ch;
+  max-width: 52ch;
 
   /* Spread: move down */
   translate: 0 calc(var(--spread) * 6vh);
