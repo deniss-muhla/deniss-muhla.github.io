@@ -1,0 +1,680 @@
+/* ── Animated custom properties (dark → light) ── */
+
+@property --bg {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #24273a;
+}
+
+@property --bg-panel {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #1e2030;
+}
+
+@property --ink {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #cad3f5;
+}
+
+@property --ink-sub {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #a5adcb;
+}
+
+@property --ink-faint {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #6e738d;
+}
+
+@property --line {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #363a4f;
+}
+
+@property --accent {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #c6a0f6;
+}
+
+@property --accent2 {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #b7bdf8;
+}
+
+@property --spread {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+@property --page-progress {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}
+
+/* ── Scroll-driven theme keyframes ── */
+/* Transition completes by ~20% scroll so CV document appears in light mode */
+
+@keyframes theme-shift {
+  0%,
+  9% {
+    /* Macchiato (dark) */
+    --bg: #24273a;
+    --bg-panel: #1e2030;
+    --ink: #cad3f5;
+    --ink-sub: #a5adcb;
+    --ink-faint: #6e738d;
+    --line: #363a4f;
+    --accent: #c6a0f6;
+    --accent2: #b7bdf8;
+    --spread: 0;
+  }
+  15%,
+  100% {
+    /* Latte (light) */
+    --bg: #eff1f5;
+    --bg-panel: #dce0e8;
+    --ink: #4c4f69;
+    --ink-sub: #5c5f77;
+    --ink-faint: #9ca0b0;
+    --line: #ccd0da;
+    --accent: #8839ef;
+    --accent2: #7287fd;
+    --spread: 1;
+  }
+}
+
+/* ── Root ── */
+
+.root {
+  --page-progress: 0;
+  animation: theme-shift linear both;
+  animation-timeline: scroll(root block);
+  animation-duration: 1ms;
+  animation-timing-function: ease-in-out;
+
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Playfair Display", Georgia, serif;
+  min-height: 100vh;
+}
+
+/* ── Hero Section ── */
+
+.hero {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  overflow: hidden;
+}
+
+.heroContent {
+  position: relative;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: calc(16px + var(--spread) * 24px);
+  translate: 0 calc(var(--spread) * -12vh);
+}
+
+/* ── Watermark: behind name, top-left like v2 editorial ── */
+
+.watermark {
+  position: absolute;
+  top: -60px;
+  left: -40px;
+  font-size: 22rem;
+  font-weight: 700;
+  line-height: 0.8;
+  color: var(--line);
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.35;
+  z-index: 0;
+
+  /* Spread: move further left/up */
+  translate: calc(var(--spread) * -20vw) calc(var(--spread) * -10vh);
+}
+
+.heroName {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-size: clamp(2.4rem, 5vw, 3.8rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+}
+
+.heroRule {
+  position: relative;
+  z-index: 1;
+  border: none;
+  border-top: 1px solid var(--line);
+  width: 80px;
+  margin: 0;
+}
+
+.heroBio {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.84rem;
+  line-height: 1.85;
+  color: var(--ink-sub);
+  max-width: 52ch;
+
+  /* Spread: move down */
+  translate: 0 calc(var(--spread) * 6vh);
+}
+
+.heroLinks {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 32px;
+
+  /* Spread: move down + apart */
+  translate: 0 calc(var(--spread) * 10vh);
+}
+
+.heroLinks a {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.78rem;
+  color: var(--accent);
+  letter-spacing: 0.04em;
+  transition: color 200ms;
+}
+
+.heroLinks a:hover {
+  color: var(--ink);
+}
+
+.heroLocation {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+
+  /* Spread: move down */
+  translate: 0 calc(var(--spread) * 14vh);
+}
+
+/* ── Floating hero avatar ── */
+
+.avatarFloat {
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  object-fit: cover;
+  opacity: 0.65;
+  margin-top: 44px;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Arrow indicators ── */
+
+.arrowDown,
+.arrowUp {
+  position: fixed;
+  left: 50%;
+  width: 42px;
+  height: 42px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 60%, var(--bg) 15%);
+  box-shadow: 0 12px 34px color-mix(in srgb, var(--bg-panel) 34%, transparent);
+  pointer-events: none;
+  z-index: 90;
+  opacity: 0.5;
+}
+
+.arrowDown {
+  bottom: 20px;
+}
+
+.arrowUp {
+  top: 20px;
+  opacity: 0.5;
+}
+
+.arrowDown::before,
+.arrowUp::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 54% 54%;
+  animation: arrow-pulse 1.8s ease-in-out infinite;
+}
+
+.arrowDown::before {
+  -webkit-mask: center / 54% 54% no-repeat
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M22 30L50 58L78 30' fill='none' stroke='black' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M22 56L50 84L78 56' fill='none' stroke='black' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  mask: center / 54% 54% no-repeat
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M22 30L50 58L78 30' fill='none' stroke='black' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M22 56L50 84L78 56' fill='none' stroke='black' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.arrowUp::before {
+  -webkit-mask: center / 54% 54% no-repeat
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M22 44L50 16L78 44' fill='none' stroke='black' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M22 70L50 42L78 70' fill='none' stroke='black' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  mask: center / 54% 54% no-repeat
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M22 44L50 16L78 44' fill='none' stroke='black' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M22 70L50 42L78 70' fill='none' stroke='black' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+@keyframes arrow-pulse {
+  0%,
+  100% {
+    filter: opacity(1);
+  }
+
+  50% {
+    filter: opacity(0.3);
+  }
+}
+
+.root[data-at-top] .arrowUp {
+  opacity: 0;
+}
+
+.root[data-at-bottom] .arrowDown {
+  opacity: 0;
+}
+
+.arrowDown,
+.arrowUp {
+  transition: opacity 180ms ease;
+}
+
+/* ── CV Section ── */
+
+.cvSection {
+  position: relative;
+  padding: 0 24px 120px;
+  scroll-margin-top: 120px;
+}
+
+.cvHeader {
+  position: sticky;
+  top: 16px;
+  z-index: 30;
+  max-width: 960px;
+  margin: 0 auto 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 84%, transparent);
+  box-shadow: 0 18px 48px color-mix(in srgb, var(--bg-panel) 36%, transparent);
+  backdrop-filter: blur(18px) saturate(130%);
+  -webkit-backdrop-filter: blur(18px) saturate(130%);
+}
+
+.cvBackLink {
+  font-family: "Libre Baskerville", Georgia, serif;
+  font-size: 0.76rem;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--ink) 58%, var(--ink-faint) 42%);
+  white-space: nowrap;
+  transition: color 200ms;
+}
+
+.cvBackLink:hover {
+  color: var(--ink);
+}
+
+.cvDownload {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.72rem;
+  color: color-mix(in srgb, var(--accent) 88%, var(--ink) 12%);
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  transition: color 200ms;
+}
+
+.cvDownload:hover {
+  color: var(--ink);
+}
+
+/* ── CV Document ── */
+
+.document {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 72px 80px 88px;
+  background: white;
+  box-shadow: 0 1px 0 var(--line);
+  position: relative;
+}
+
+/* ── Avatar inside CV document (for PDF rendering) ── */
+
+.avatarDoc {
+  float: right;
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  object-fit: cover;
+  shape-outside: circle();
+  margin: 8px 0 24px 32px;
+}
+
+/* ── Markdown (CV content) ── */
+
+.markdown {
+  font-family: "Libre Baskerville", Georgia, serif;
+  color: #4c4f69;
+}
+
+.markdown :global(*) {
+  max-width: 100%;
+}
+
+.markdown :global(h1) {
+  margin: 0 0 8px;
+  font-family: "Libre Baskerville", Georgia, serif;
+  font-size: 2.2rem;
+  font-weight: 700;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+  color: #4c4f69;
+}
+
+.markdown :global(h1 + p) {
+  font-style: italic;
+}
+
+.markdown :global(h2) {
+  margin: 52px 0 18px;
+  padding: 0;
+  border: none;
+  font-family: "Libre Baskerville", Georgia, serif;
+  font-size: 0.76rem;
+  font-weight: 400;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #8839ef;
+}
+
+.markdown :global(h2)::after {
+  content: "";
+  display: block;
+  width: 36px;
+  height: 1px;
+  background: #8839ef;
+  margin-top: 10px;
+}
+
+.markdown :global(h3) {
+  margin: 28px 0 6px;
+  font-family: "Libre Baskerville", Georgia, serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: #4c4f69;
+}
+
+.markdown :global(p) {
+  margin: 0 0 12px;
+  font-size: 0.88rem;
+  line-height: 1.85;
+  color: #5c5f77;
+}
+
+.markdown :global(strong) {
+  color: #4c4f69;
+  font-weight: 700;
+}
+
+.markdown :global(blockquote) {
+  clear: both;
+  margin: 16px 0 24px;
+  padding: 0 0 0 24px;
+  border-left: 1px solid #7287fd;
+  background: transparent;
+}
+
+.markdown :global(blockquote p) {
+  margin: 0;
+  font-size: 0.9rem;
+  font-style: italic;
+  line-height: 1.8;
+  color: #4c4f69;
+}
+
+.markdown :global(ul),
+.markdown :global(ol) {
+  margin: 0 0 14px;
+  padding-left: 20px;
+}
+
+.markdown :global(li) {
+  margin-bottom: 4px;
+  font-size: 0.88rem;
+  line-height: 1.75;
+  color: #5c5f77;
+}
+
+.markdown :global(a) {
+  color: #7287fd;
+}
+
+.markdown :global(a:hover) {
+  text-decoration: underline;
+}
+
+.markdown :global(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 16px;
+}
+
+.markdown :global(th),
+.markdown :global(td) {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid #ccd0da;
+  font-size: 0.84rem;
+  color: #5c5f77;
+}
+
+.markdown :global(th) {
+  font-family: "Libre Baskerville", Georgia, serif;
+  font-size: 0.68rem;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #9ca0b0;
+}
+
+.markdown :global(hr) {
+  border: none;
+  height: 0;
+  margin: 36px 0;
+}
+
+.markdown :global(hr)::after {
+  content: "· · ·";
+  display: block;
+  text-align: center;
+  color: #bcc0cc;
+  letter-spacing: 0.4em;
+  font-size: 0.8rem;
+}
+
+/* ── Print ── */
+
+@media print {
+  .root {
+    --bg: white;
+    --ink: #4c4f69;
+  }
+
+  .hero {
+    display: none;
+  }
+
+  .arrowDown,
+  .arrowUp {
+    display: none;
+  }
+
+  .avatarFloat {
+    display: none;
+  }
+
+  .cvSection {
+    padding: 0;
+  }
+
+  .cvHeader {
+    display: none;
+  }
+
+  .document {
+    margin: 0;
+    box-shadow: none;
+    padding: 20px 0;
+    max-width: none;
+  }
+
+  .markdown :global(h2) {
+    break-after: avoid;
+  }
+
+  .markdown :global(h3) {
+    break-after: avoid;
+  }
+
+  .markdown :global(ul),
+  .markdown :global(ol),
+  .markdown :global(blockquote),
+  .markdown :global(table) {
+    break-inside: avoid;
+  }
+
+  .avatarDoc {
+    width: 72px;
+    height: 72px;
+    margin: 0 0 20px 20px;
+  }
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 768px) {
+  .hero {
+    padding: 60px 20px;
+  }
+
+  .watermark {
+    font-size: 14rem;
+    top: -40px;
+    left: -20px;
+  }
+
+  .heroContent {
+    max-width: 100%;
+  }
+
+  .avatarFloat {
+    width: 128px;
+    height: 128px;
+  }
+
+  .cvSection {
+    padding: 0 16px 80px;
+  }
+
+  .cvHeader {
+    top: 12px;
+    padding: 14px 18px;
+  }
+
+  .arrowDown,
+  .arrowUp {
+    width: 42px;
+    height: 42px;
+  }
+
+  .arrowUp {
+    top: 14px;
+  }
+
+
+  .document {
+    padding: 40px 28px 56px;
+  }
+
+  .avatarDoc {
+    width: 84px;
+    height: 84px;
+    margin: 4px 0 20px 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .heroLinks {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .watermark {
+    font-size: 14rem;
+    top: -40px;
+    left: -20px;
+  }
+
+  .avatarFloat {
+    width: 96px;
+    height: 96px;
+  }
+
+  .cvHeader {
+    padding: 12px 14px;
+  }
+
+  .cvBackLink,
+  .cvDownload {
+    font-size: 0.66rem;
+  }
+
+  .arrowDown,
+  .arrowUp {
+    width: 36px;
+    height: 36px;
+  }
+
+  .arrowUp {
+    top: 14px;
+  }
+
+  .avatarDoc {
+    width: 72px;
+    height: 72px;
+    margin: 0 0 16px 16px;
+  }
+}
