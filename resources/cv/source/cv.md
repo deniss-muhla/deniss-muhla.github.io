@@ -24,10 +24,11 @@ I work best where product delivery, component architecture, and developer experi
 IF delivers P&C insurance solutions across Scandinavia and the Baltics. I work across customer-facing applications connected by a shared design system.
 
 - Implemented and maintained design-system driven UI across multiple software products.
-- Worked in an ad hoc cross-team setup to collect consumer feedback and turn it into actionable system improvements.
+- Worked in ad hoc cross-team collaborations to collect consumer feedback and turn it into actionable system improvements.
+- Contributed to architectural discussions that challenged default design-system approaches so they could support products with different tech stacks and different levels of adoption.
+- Helped evaluate trade-offs across implementation options, adoption paths, release expectations, and QA impact to keep decisions practical and maintainable.
 - Advocated for atomic, modular components to keep the system adaptable and reduce product-specific bloat.
-- Helped connect design-system delivery with practical team adoption, release expectations, and QA impact.
-- Explored agentic coding practices and created a reusable skills for design-system scaffolding and integration to accelerate consistent implementation.
+- Explored agentic coding practices and created reusable skills for design-system scaffolding and integration to accelerate consistent implementation.
 
 **Stack:** JavaScript, TypeScript, React, Web Components, Docker, Cypress, Vite, Azure DevOps, BrowserStack
 
