@@ -1,0 +1,254 @@
+/* V3 "Grid" — Swiss design, dotted borders, compact, teal accent */
+
+.root {
+  --base: #eff1f5;
+  --mantle: #e6e9ef;
+  --crust: #dce0e8;
+  --text: #4c4f69;
+  --subtext1: #5c5f77;
+  --subtext0: #6c6f85;
+  --overlay0: #9ca0b0;
+  --surface0: #ccd0da;
+  --surface1: #bcc0cc;
+  --teal: #179299;
+  --sapphire: #209fb5;
+
+  min-height: 100vh;
+  background: var(--mantle);
+  color: var(--text);
+  font-family: "Bricolage Grotesque", sans-serif;
+  padding: 40px 24px 80px;
+}
+
+.nav {
+  max-width: 840px;
+  margin: 0 auto 16px;
+  display: flex;
+  justify-content: space-between;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+
+.nav a {
+  color: var(--subtext0);
+  padding: 4px 0;
+  border-bottom: 1px dotted transparent;
+  transition: border-color 200ms, color 200ms;
+}
+
+.nav a:hover {
+  color: var(--teal);
+  border-bottom-color: var(--teal);
+}
+
+.document {
+  position: relative;
+  max-width: 840px;
+  margin: 0 auto;
+  padding: 56px 56px 72px;
+  background: var(--base);
+  border: 1px dotted var(--surface1);
+}
+
+.photo {
+  position: absolute;
+  top: 48px;
+  right: 56px;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px dotted var(--teal);
+  padding: 2px;
+}
+
+/* ── Markdown ── */
+
+.markdown :global(*) {
+  max-width: 100%;
+}
+
+.markdown :global(h1) {
+  margin: 0 0 4px;
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  padding-right: 96px;
+}
+
+.markdown :global(h1 + p) {
+  padding-right: 96px;
+}
+
+.markdown :global(h2) {
+  margin: 32px 0 12px;
+  padding: 10px 0;
+  border-top: 1px dotted var(--surface1);
+  border-bottom: 1px dotted var(--surface1);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--teal);
+}
+
+.markdown :global(h3) {
+  margin: 18px 0 4px;
+  font-size: 0.96rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.markdown :global(p) {
+  margin: 0 0 8px;
+  font-size: 0.84rem;
+  line-height: 1.65;
+  color: var(--subtext1);
+}
+
+.markdown :global(strong) {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.markdown :global(blockquote) {
+  margin: 8px 0 14px;
+  padding: 10px 16px;
+  border-left: none;
+  border: 1px dotted var(--teal);
+  background: transparent;
+}
+
+.markdown :global(blockquote p) {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--subtext1);
+}
+
+.markdown :global(ul),
+.markdown :global(ol) {
+  margin: 0 0 10px;
+  padding-left: 16px;
+}
+
+.markdown :global(li) {
+  margin-bottom: 2px;
+  font-size: 0.84rem;
+  line-height: 1.55;
+  color: var(--subtext1);
+}
+
+.markdown :global(a) {
+  color: var(--teal);
+}
+
+.markdown :global(a:hover) {
+  text-decoration: underline;
+}
+
+.markdown :global(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 14px;
+  border: 1px dotted var(--surface1);
+}
+
+.markdown :global(th),
+.markdown :global(td) {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px dotted var(--surface1);
+  font-size: 0.82rem;
+  color: var(--subtext1);
+}
+
+.markdown :global(th) {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--teal);
+  background: var(--mantle);
+}
+
+.markdown :global(hr) {
+  border: none;
+  border-top: 1px dotted var(--surface1);
+  margin: 20px 0;
+}
+
+/* ── Print ── */
+
+@media print {
+  .root {
+    background: white;
+    padding: 0;
+  }
+
+  .nav {
+    display: none;
+  }
+
+  .document {
+    margin: 0;
+    border: none;
+    padding: 20px 24px;
+    max-width: none;
+  }
+
+  .photo {
+    top: 12px;
+    right: 24px;
+    border: 1px dotted var(--teal);
+  }
+
+  .markdown :global(h2) {
+    break-after: avoid;
+  }
+
+  .markdown :global(h3) {
+    break-after: avoid;
+  }
+
+  .markdown :global(ul),
+  .markdown :global(ol),
+  .markdown :global(blockquote),
+  .markdown :global(table) {
+    break-inside: avoid;
+  }
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 640px) {
+  .root {
+    padding: 32px 16px 56px;
+  }
+
+  .document {
+    padding: 32px 20px 44px;
+  }
+
+  .photo {
+    top: 24px;
+    right: 20px;
+    width: 56px;
+    height: 56px;
+  }
+
+  .markdown :global(h1) {
+    font-size: 1.35rem;
+    padding-right: 72px;
+  }
+
+  .markdown :global(h1 + p) {
+    padding-right: 72px;
+  }
+}

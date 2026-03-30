@@ -36,11 +36,8 @@ jobs:
           cache: true
           run-install: true
 
-      - name: Typecheck
-        run: vp run typecheck
-
       - name: Build static site
-        run: vp build
+        run: vp run build
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'

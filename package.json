@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "vp dev",
     "typecheck": "tsc -b",
     "cv:build": "node ./scripts/cv-pipeline.mjs",
+    "build": "vp run typecheck && vp build",
     "build:site": "tsc -b && vp build",
     "preview:site": "vp preview"
   },

@@ -1,6 +1,6 @@
 # Deniss Muhla
 
-Lead Front-end Engineer  
+Senior Front-end Engineer  
 Latvia, EU  
 Email: [deniss.muhla@gmail.com](mailto:deniss.muhla@gmail.com)  
 Phone / WhatsApp: +371 29966072
@@ -13,14 +13,14 @@ I work best where product delivery, component architecture, and developer experi
 
 ## Current Focus
 
-- Design systems built around atomic, modular components with clear adoption paths.
+- Design systems built around atomic, modular and accessible components with clear adoption paths.
 - React, TypeScript, Web Components, and Vite-based front-end platforms.
 - MCP, agent skills, and structured LLM context orchestration for real engineering workflows.
 - Acting as an ambassador and innovation driver for agentic coding inside the team, including creating a reusable skill for design-system scaffolding and integration.
 
 ## Experience
 
-### IF P&C Insurance | Lead Front-end JavaScript Application Developer | Riga | Aug 2021 - Present
+### IF P&C Insurance | Senior Front-end JavaScript Application Developer | Riga | Aug 2021 - Present
 
 IF delivers P&C insurance solutions across Scandinavia and the Baltics. I work across customer-facing applications connected by a shared design system.
 
@@ -28,9 +28,9 @@ IF delivers P&C insurance solutions across Scandinavia and the Baltics. I work a
 - Worked in an ad hoc cross-team setup to collect consumer feedback and turn it into actionable system improvements.
 - Advocated for atomic, modular components to keep the system adaptable and reduce product-specific bloat.
 - Helped connect design-system delivery with practical team adoption, release expectations, and QA impact.
-- Explored agentic coding practices and created a reusable skill for design-system scaffolding and integration to accelerate consistent implementation.
+- Explored agentic coding practices and created a reusable skills for design-system scaffolding and integration to accelerate consistent implementation.
 
-**Stack:** JavaScript, TypeScript, React, Web Components, Docker, Cypress, Vite, Azure DevOps
+**Stack:** JavaScript, TypeScript, React, Web Components, Docker, Cypress, Vite, Azure DevOps, BrowserStack
 
 ### Stream Labs | Team Lead, Tech Lead, Senior Front-end Developer | Daugavpils | Jun 2014 - Jul 2021
 
@@ -81,16 +81,18 @@ Stream Labs built products around video and audio content delivery, including ar
 | React                   | Advanced     |
 | Node.js                 | Advanced     |
 | C# / .NET Framework     | Advanced     |
-| npm / Yarn / pnpm       | Advanced     |
+| npm / yarn / pnpm / bun | Advanced     |
+| Lit                     | Advanced     |
+| Web Components          | Advanced     |
+| GitHub Copilot          | Advanced     |
 | Next.js                 | Intermediate |
-| Lit                     | Intermediate |
+| BrowserStack            | Intermediate |
 | Cypress                 | Intermediate |
 | Docker                  | Intermediate |
 | SQL                     | Intermediate |
 | Git                     | Intermediate |
 | GitLab                  | Intermediate |
 | Azure DevOps            | Intermediate |
-| Web Components          | Intermediate |
 | Vite                    | Intermediate |
 
 ## Language

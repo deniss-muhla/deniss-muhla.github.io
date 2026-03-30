@@ -1,0 +1,263 @@
+/* V4 "Diagram" — Blueprint feel, numbered sections, left spine, monospace heavy */
+
+.root {
+  --base: #eff1f5;
+  --mantle: #e6e9ef;
+  --crust: #dce0e8;
+  --text: #4c4f69;
+  --subtext1: #5c5f77;
+  --subtext0: #6c6f85;
+  --overlay0: #9ca0b0;
+  --surface0: #ccd0da;
+  --surface1: #bcc0cc;
+  --rosewater: #dc8a78;
+  --sapphire: #209fb5;
+
+  min-height: 100vh;
+  background: var(--crust);
+  color: var(--text);
+  font-family: "Archivo", sans-serif;
+  padding: 44px 24px 88px;
+}
+
+.nav {
+  max-width: 800px;
+  margin: 0 auto 18px;
+  display: flex;
+  justify-content: space-between;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+}
+
+.nav a {
+  color: var(--overlay0);
+  transition: color 200ms;
+}
+
+.nav a:hover {
+  color: var(--rosewater);
+}
+
+.document {
+  position: relative;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 60px 64px 80px 80px;
+  background: var(--base);
+  border: 1px solid var(--surface0);
+  border-left: 3px solid var(--rosewater);
+}
+
+.photo {
+  position: absolute;
+  top: 52px;
+  right: 64px;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+/* ── Markdown ── */
+
+.markdown {
+  counter-reset: section;
+}
+
+.markdown :global(*) {
+  max-width: 100%;
+}
+
+.markdown :global(h1) {
+  margin: 0 0 4px;
+  font-family: "Archivo", sans-serif;
+  font-size: 1.8rem;
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  padding-right: 100px;
+}
+
+.markdown :global(h1 + p) {
+  padding-right: 100px;
+}
+
+.markdown :global(h2) {
+  margin: 40px 0 14px;
+  padding: 0 0 0 20px;
+  border: none;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--rosewater);
+  position: relative;
+  counter-increment: section;
+}
+
+.markdown :global(h2)::before {
+  content: counter(section, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.68rem;
+  font-weight: 400;
+  color: var(--overlay0);
+}
+
+.markdown :global(h3) {
+  margin: 22px 0 6px;
+  font-size: 1.02rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.markdown :global(p) {
+  margin: 0 0 10px;
+  font-size: 0.86rem;
+  line-height: 1.7;
+  color: var(--subtext1);
+}
+
+.markdown :global(strong) {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.markdown :global(blockquote) {
+  margin: 8px 0 16px;
+  padding: 12px 16px 12px 20px;
+  border-left: 2px solid var(--rosewater);
+  background: var(--mantle);
+}
+
+.markdown :global(blockquote p) {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--subtext1);
+}
+
+.markdown :global(ul),
+.markdown :global(ol) {
+  margin: 0 0 12px;
+  padding-left: 18px;
+}
+
+.markdown :global(li) {
+  margin-bottom: 3px;
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: var(--subtext1);
+}
+
+.markdown :global(a) {
+  color: var(--sapphire);
+}
+
+.markdown :global(a:hover) {
+  text-decoration: underline;
+}
+
+.markdown :global(table) {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 14px;
+}
+
+.markdown :global(th),
+.markdown :global(td) {
+  padding: 7px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--surface0);
+  font-size: 0.84rem;
+  color: var(--subtext1);
+}
+
+.markdown :global(th) {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--rosewater);
+}
+
+.markdown :global(hr) {
+  border: none;
+  border-top: 1px solid var(--surface0);
+  margin: 24px 0;
+}
+
+/* ── Print ── */
+
+@media print {
+  .root {
+    background: white;
+    padding: 0;
+  }
+
+  .nav {
+    display: none;
+  }
+
+  .document {
+    margin: 0;
+    border: none;
+    border-left: 2px solid var(--rosewater);
+    padding: 20px 24px 20px 32px;
+    max-width: none;
+  }
+
+  .photo {
+    top: 12px;
+    right: 24px;
+  }
+
+  .markdown :global(h2) {
+    break-after: avoid;
+  }
+
+  .markdown :global(h3) {
+    break-after: avoid;
+  }
+
+  .markdown :global(ul),
+  .markdown :global(ol),
+  .markdown :global(blockquote),
+  .markdown :global(table) {
+    break-inside: avoid;
+  }
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 640px) {
+  .root {
+    padding: 32px 16px 60px;
+  }
+
+  .document {
+    padding: 36px 20px 48px 32px;
+  }
+
+  .photo {
+    top: 28px;
+    right: 20px;
+    width: 60px;
+    height: 60px;
+  }
+
+  .markdown :global(h1) {
+    font-size: 1.5rem;
+    padding-right: 76px;
+  }
+
+  .markdown :global(h1 + p) {
+    padding-right: 76px;
+  }
+}

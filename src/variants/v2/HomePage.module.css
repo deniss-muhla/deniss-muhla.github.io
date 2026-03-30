@@ -1,0 +1,128 @@
+.root {
+  --base: #24273a;
+  --mantle: #1e2030;
+  --text: #cad3f5;
+  --subtext0: #a5adcb;
+  --overlay0: #6e738d;
+  --surface0: #363a4f;
+  --surface1: #494d64;
+  --mauve: #c6a0f6;
+  --lavender: #b7bdf8;
+
+  min-height: 100vh;
+  background: var(--base);
+  color: var(--text);
+  font-family: "Playfair Display", Georgia, serif;
+  display: flex;
+  padding-top: 36px;
+}
+
+.content {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 80px 10vw;
+  max-width: 680px;
+  overflow: hidden;
+}
+
+.watermark {
+  position: absolute;
+  top: -60px;
+  left: -40px;
+  font-size: 22rem;
+  font-weight: 700;
+  line-height: 0.8;
+  color: var(--surface0);
+  pointer-events: none;
+  user-select: none;
+}
+
+.name {
+  position: relative;
+  margin: 0;
+  font-size: clamp(2.4rem, 4.5vw, 3.6rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.rule {
+  border: none;
+  border-top: 1px solid var(--surface0);
+  margin: 36px 0;
+  width: 100px;
+}
+
+.bio {
+  position: relative;
+  margin: 0;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.86rem;
+  line-height: 1.85;
+  color: var(--subtext0);
+  max-width: 48ch;
+}
+
+.links {
+  position: relative;
+  margin-top: 52px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.links a {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.8rem;
+  color: var(--mauve);
+  letter-spacing: 0.03em;
+  transition: color 200ms;
+}
+
+.links a:hover {
+  color: var(--text);
+}
+
+.location {
+  position: relative;
+  margin-top: auto;
+  padding-top: 52px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--overlay0);
+}
+
+.photo {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+  opacity: 0.45;
+}
+
+@media (max-width: 640px) {
+  .content {
+    padding: 60px 24px;
+  }
+
+  .watermark {
+    font-size: 14rem;
+    top: -40px;
+    left: -24px;
+  }
+
+  .photo {
+    width: 36px;
+    height: 36px;
+    bottom: 20px;
+    right: 20px;
+  }
+}

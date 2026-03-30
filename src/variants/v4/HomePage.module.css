@@ -1,0 +1,137 @@
+.root {
+  --base: #24273a;
+  --text: #cad3f5;
+  --subtext0: #a5adcb;
+  --overlay0: #6e738d;
+  --surface0: #363a4f;
+  --surface1: #494d64;
+  --mauve: #c6a0f6;
+  --peach: #f5a97f;
+
+  min-height: 100vh;
+  background: var(--base);
+  color: var(--text);
+  font-family: "Archivo", sans-serif;
+  display: flex;
+  align-items: center;
+  padding-top: 36px;
+}
+
+.content {
+  width: 100%;
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 80px 24px;
+}
+
+.spine {
+  border-left: 1px solid var(--surface0);
+  padding-left: 44px;
+  margin-left: 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 52px;
+}
+
+.block {
+  position: relative;
+}
+
+.block::before {
+  content: "";
+  position: absolute;
+  left: -48px;
+  top: 8px;
+  width: 8px;
+  height: 1px;
+  background: var(--surface1);
+}
+
+.label {
+  position: absolute;
+  left: -90px;
+  top: 0;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.68rem;
+  color: var(--overlay0);
+  letter-spacing: 0.08em;
+}
+
+.name {
+  margin: 0;
+  font-size: clamp(2.4rem, 5vw, 3.6rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.role {
+  margin: 10px 0 0;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.8rem;
+  color: var(--subtext0);
+  letter-spacing: 0.06em;
+}
+
+.tagline {
+  margin: 0;
+  color: var(--subtext0);
+  font-size: 0.94rem;
+  line-height: 1.75;
+  max-width: 40ch;
+}
+
+.focus {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.78rem;
+  color: var(--subtext0);
+}
+
+.links {
+  display: flex;
+  gap: 28px;
+}
+
+.links a {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  color: var(--peach);
+  transition: color 200ms;
+}
+
+.links a:hover {
+  color: var(--text);
+}
+
+.coord {
+  margin: 72px 0 0;
+  text-align: right;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  color: var(--overlay0);
+  opacity: 0.45;
+}
+
+@media (max-width: 640px) {
+  .spine {
+    margin-left: 36px;
+    padding-left: 28px;
+    gap: 40px;
+  }
+
+  .label {
+    left: -68px;
+  }
+
+  .block::before {
+    left: -32px;
+  }
+}
