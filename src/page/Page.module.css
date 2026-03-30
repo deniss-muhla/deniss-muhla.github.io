@@ -242,7 +242,7 @@
   height: 42px;
   transform: translateX(-50%);
   border-radius: 50%;
-  background: color-mix(in srgb, var(--ink) 88%, var(--bg) 12%);
+  background: color-mix(in srgb, var(--ink) 60%, var(--bg) 15%);
   box-shadow: 0 12px 34px color-mix(in srgb, var(--bg-panel) 34%, transparent);
   pointer-events: none;
   z-index: 90;
