@@ -12,13 +12,13 @@ Personal GitHub Pages site for Deniss Muhla.
 
 ## Development
 
-- `vp install`
-- `vp dev`
-- `vp run typecheck`
-- `vp run cv:build`
-- `vp run build:site`
+- `pnpm install`
+- `pnpm dev`
+- `pnpm typecheck`
+- `pnpm cv:build`
+- `pnpm build`
 
-The site uses a separate homepage and `/cv/` page. The downloadable PDF is generated from the markdown source before build output is produced.
+The site is a single-page experience with the CV embedded in the main page. The downloadable PDF is generated from the markdown source during the build pipeline.
 
 ## CV Source
 

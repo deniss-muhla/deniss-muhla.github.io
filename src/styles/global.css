@@ -1,30 +1,8 @@
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Sora:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700&family=Bricolage+Grotesque:wght@400;600;700&family=JetBrains+Mono:wght@400;500&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Outfit:wght@300;400;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap");
 
-:root {
-  color-scheme: light;
-  --bg: #f5efe7;
-  --bg-strong: #fffaf5;
-  --panel: rgba(255, 250, 245, 0.8);
-  --panel-strong: rgba(255, 255, 255, 0.92);
-  --ink: #1b171c;
-  --muted: #5d5157;
-  --line: rgba(55, 38, 46, 0.14);
-  --accent: #7b2133;
-  --accent-soft: #cf9f72;
-  --accent-cool: #1c5b63;
-  --shadow-soft: 0 24px 70px rgba(50, 31, 38, 0.14);
-  --shadow-strong: 0 40px 120px rgba(45, 28, 36, 0.18);
-  --font-sans: "Sora", "Trebuchet MS", sans-serif;
-  --font-display: "Fraunces", Georgia, serif;
-  --max-width: 1220px;
-  font-family: var(--font-sans);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -41,33 +19,10 @@ html::-webkit-scrollbar {
 body {
   margin: 0;
   min-height: 100vh;
-  color: var(--ink);
-  background:
-    radial-gradient(circle at top left, rgba(207, 159, 114, 0.24), transparent 32%),
-    radial-gradient(circle at top right, rgba(123, 33, 51, 0.14), transparent 30%),
-    linear-gradient(180deg, #fbf6f0 0%, var(--bg) 100%);
-  position: relative;
-}
-
-body::before,
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: -1;
-}
-
-body::before {
-  background:
-    linear-gradient(rgba(123, 33, 51, 0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(123, 33, 51, 0.025) 1px, transparent 1px);
-  background-size: 34px 34px;
-  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.5), transparent 78%);
-}
-
-body::after {
-  background: radial-gradient(circle at 50% -10%, rgba(255, 255, 255, 0.8), transparent 48%);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
@@ -92,15 +47,5 @@ img {
 }
 
 ::selection {
-  background: rgba(123, 33, 51, 0.18);
-}
-
-@media (max-width: 720px) {
-  :root {
-    font-size: 15px;
-  }
-
-  body::before {
-    background-size: 24px 24px;
-  }
+  background: rgba(198, 160, 246, 0.25);
 }

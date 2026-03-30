@@ -3,8 +3,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { profile } from "../data/content";
-import heroPhoto from "../../docs/photo/photo_2024-10-09_06-42-38.jpg";
-import cvPhoto from "../../docs/photo/photo_2025-10-22_19-42-29.jpg";
+import heroPhoto from "../../resources/photo/hero-photo.jpg";
+import cvPhoto from "../../resources/photo/cv-photo.jpg";
 import cvMarkdown from "../../resources/cv/source/cv.md?raw";
 import styles from "./Page.module.css";
 

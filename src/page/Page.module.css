@@ -222,11 +222,11 @@
 /* ── Floating hero avatar ── */
 
 .avatarFloat {
-  width: 72px;
-  height: 72px;
+  width: 128px;
+  height: 128px;
   border-radius: 50%;
   object-fit: cover;
-  opacity: 0.56;
+  opacity: 0.65;
   margin-top: 44px;
   position: relative;
   z-index: 1;
@@ -238,14 +238,15 @@
 .arrowUp {
   position: fixed;
   left: 50%;
-  width: 56px;
-  height: 56px;
+  width: 42px;
+  height: 42px;
   transform: translateX(-50%);
   border-radius: 50%;
   background: color-mix(in srgb, var(--ink) 88%, var(--bg) 12%);
   box-shadow: 0 12px 34px color-mix(in srgb, var(--bg-panel) 34%, transparent);
   pointer-events: none;
   z-index: 90;
+  opacity: 0.5;
 }
 
 .arrowDown {
@@ -254,7 +255,7 @@
 
 .arrowUp {
   top: 20px;
-  opacity: 1;
+  opacity: 0.5;
 }
 
 .arrowDown::before,
@@ -373,8 +374,8 @@
 
 .avatarDoc {
   float: right;
-  width: 96px;
-  height: 96px;
+  width: 128px;
+  height: 128px;
   border-radius: 50%;
   object-fit: cover;
   shape-outside: circle();
@@ -600,8 +601,8 @@
   }
 
   .avatarFloat {
-    width: 64px;
-    height: 64px;
+    width: 128px;
+    height: 128px;
   }
 
   .cvSection {
@@ -615,9 +616,14 @@
 
   .arrowDown,
   .arrowUp {
-    width: 52px;
-    height: 52px;
+    width: 42px;
+    height: 42px;
   }
+
+  .arrowUp {
+    top: 14px;
+  }
+
 
   .document {
     padding: 40px 28px 56px;
@@ -643,8 +649,8 @@
   }
 
   .avatarFloat {
-    width: 56px;
-    height: 56px;
+    width: 96px;
+    height: 96px;
   }
 
   .cvHeader {
@@ -658,24 +664,12 @@
 
   .arrowDown,
   .arrowUp {
-    width: 46px;
-    height: 46px;
+    width: 36px;
+    height: 36px;
   }
 
-  .arrowDown::before {
-    top: 11px;
-  }
-
-  .arrowDown::after {
-    top: 21px;
-  }
-
-  .arrowUp::before {
-    bottom: 11px;
-  }
-
-  .arrowUp::after {
-    bottom: 21px;
+  .arrowUp {
+    top: 14px;
   }
 
   .avatarDoc {

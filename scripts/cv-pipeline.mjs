@@ -14,6 +14,7 @@ const thisFile = fileURLToPath(import.meta.url);
 const thisDir = path.dirname(thisFile);
 const rootDir = path.resolve(thisDir, "..");
 const markdownPath = path.join(rootDir, "resources", "cv", "source", "cv.md");
+const cvPhotoPath = path.join(rootDir, "resources", "photo", "cv-photo.jpg");
 const outputDir = path.join(rootDir, "public", "downloads");
 const outputPdfPath = path.join(outputDir, "deniss-muhla-cv.pdf");
 const execFileAsync = promisify(execFile);
@@ -23,6 +24,72 @@ let lastRenderedHash = "";
 
 function createHash(value) {
   return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function sectionizeHtml(bodyHtml) {
+  const sections = [];
+  const [introHtml, ...sectionParts] = bodyHtml.split(/(?=<h2>)/);
+
+  if (introHtml?.trim()) {
+    sections.push(`<section class="cvSectionIntro">${introHtml}</section>`);
+  }
+
+  for (const sectionPart of sectionParts) {
+    const trimmedPart = sectionPart.trim();
+
+    if (!trimmedPart) {
+      continue;
+    }
+
+    const headingMatch = trimmedPart.match(/^<h2>[\s\S]*?<\/h2>/);
+
+    if (!headingMatch) {
+      sections.push(`<section class="cvSectionBlock">${trimmedPart}</section>`);
+      continue;
+    }
+
+    const headingHtml = headingMatch[0];
+    const remainderHtml = trimmedPart.slice(headingHtml.length).trim();
+
+    if (!remainderHtml) {
+      sections.push(
+        `<section class="cvSectionBlock"><div class="cvSectionLead">${headingHtml}</div></section>`,
+      );
+      continue;
+    }
+
+    const entryParts = remainderHtml
+      .split(/(?=<h3>)/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    if (entryParts.length > 0 && entryParts[0].startsWith("<h3>")) {
+      const [firstEntry, ...otherEntries] = entryParts;
+      sections.push(`
+        <section class="cvSectionBlock">
+          <div class="cvSectionLead">
+            ${headingHtml}
+            <section class="cvEntry">${firstEntry}</section>
+          </div>
+          ${otherEntries
+            .map((entryHtml) => `<section class="cvEntry">${entryHtml}</section>`)
+            .join("")}
+        </section>
+      `);
+      continue;
+    }
+
+    sections.push(`
+      <section class="cvSectionBlock">
+        <div class="cvSectionLead">
+          ${headingHtml}
+          ${remainderHtml}
+        </div>
+      </section>
+    `);
+  }
+
+  return sections.join("");
 }
 
 async function fileExists(filePath) {
@@ -38,6 +105,8 @@ async function renderHtml(markdown) {
   const bodyHtml = String(
     await remark().use(remarkGfm).use(remarkHtml).process(markdown),
   );
+  const structuredHtml = sectionizeHtml(bodyHtml);
+  const avatarDataUrl = await fs.readFile(cvPhotoPath, { encoding: "base64" });
 
   return `<!doctype html>
   <html lang="en">
@@ -46,6 +115,8 @@ async function renderHtml(markdown) {
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <title>Deniss Muhla CV</title>
       <style>
+        @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap");
+
         @page {
           size: A4;
           margin: 16mm 14mm 18mm;
@@ -53,13 +124,13 @@ async function renderHtml(markdown) {
 
         :root {
           color-scheme: light;
-          --page: #f7f1ea;
-          --card: #fffdf9;
-          --ink: #1d191d;
-          --muted: #5f555b;
-          --line: rgba(50, 34, 42, 0.15);
-          --accent: #7b2133;
-          --accent-soft: #cf9f72;
+          --page: #ffffff;
+          --ink: #4c4f69;
+          --ink-sub: #5c5f77;
+          --ink-faint: #9ca0b0;
+          --line: #ccd0da;
+          --accent: #8839ef;
+          --accent2: #7287fd;
         }
 
         * {
@@ -68,120 +139,205 @@ async function renderHtml(markdown) {
 
         body {
           margin: 0;
-          font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-          background: radial-gradient(circle at top right, rgba(207, 159, 114, 0.18), transparent 30%), var(--page);
+          font-family: "Libre Baskerville", Georgia, serif;
+          background: var(--page);
           color: var(--ink);
-          line-height: 1.58;
-          font-size: 11pt;
+          font-synthesis: none;
+          text-rendering: optimizeLegibility;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
         }
 
         main {
-          background: var(--card);
-          border: 1px solid var(--line);
-          border-radius: 22px;
-          padding: 28px 32px 36px;
+          padding: 0;
         }
 
-        h1,
-        h2,
-        h3,
-        p,
-        ul,
-        ol,
-        table,
-        blockquote {
+        .document {
+          margin: 0;
+          padding: 20px 0;
+          background: white;
+        }
+
+        .avatarDoc {
+          float: right;
+          width: 128px;
+          height: 128px;
+          margin: 0 0 20px 20px;
+          border-radius: 50%;
+          object-fit: cover;
+          shape-outside: circle();
+        }
+
+        .markdown {
+          color: var(--ink);
+          font-family: "Libre Baskerville", Georgia, serif;
+        }
+
+        .cvSectionLead,
+        .cvEntry,
+        .markdown blockquote,
+        .markdown table,
+        .markdown ul,
+        .markdown ol {
+          break-inside: avoid;
+          page-break-inside: avoid;
+        }
+
+        .markdown p,
+        .markdown li {
+          orphans: 3;
+          widows: 3;
+        }
+
+        .markdown * {
+          max-width: 100%;
+        }
+
+        .markdown h1,
+        .markdown h2,
+        .markdown h3,
+        .markdown p,
+        .markdown ul,
+        .markdown ol,
+        .markdown table,
+        .markdown blockquote {
           margin-top: 0;
         }
 
-        h1 {
+        .markdown h1 {
+          margin: 0 0 8px;
           font-size: 24pt;
-          line-height: 1.05;
-          margin-bottom: 10px;
-          letter-spacing: -0.04em;
+          font-weight: 700;
+          line-height: 1.08;
+          letter-spacing: -0.01em;
+          color: var(--ink);
         }
 
-        h2 {
-          margin-top: 22px;
-          padding-top: 12px;
-          border-top: 1px solid var(--line);
+        .markdown h1 + p {
+          font-style: italic;
+        }
+
+        .markdown h2 {
+          margin: 52px 0 18px;
+          padding: 0;
+          border: none;
           color: var(--accent);
-          font-size: 9.5pt;
-          letter-spacing: 0.16em;
+          font-size: 9pt;
+          font-weight: 400;
+          letter-spacing: 0.22em;
           text-transform: uppercase;
         }
 
-        h3 {
-          margin-bottom: 6px;
-          font-size: 12pt;
-          line-height: 1.35;
+        .markdown h2::after {
+          content: "";
+          display: block;
+          width: 36px;
+          height: 1px;
+          margin-top: 10px;
+          background: var(--accent);
         }
 
-        p,
-        li,
-        td,
-        th {
-          color: var(--muted);
-        }
-
-        strong {
+        .markdown h3 {
+          margin: 28px 0 6px;
+          font-size: 13pt;
+          font-weight: 700;
+          line-height: 1.2;
           color: var(--ink);
         }
 
-        blockquote {
-          margin: 18px 0 22px;
-          padding: 14px 16px;
-          border-left: 4px solid var(--accent);
-          background: rgba(123, 33, 51, 0.06);
-          color: var(--ink);
-          font-size: 11.3pt;
+        .markdown p {
+          margin: 0 0 12px;
+          font-size: 10.6pt;
+          line-height: 1.85;
+          color: var(--ink-sub);
         }
 
-        ul,
-        ol {
+        .markdown strong {
+          color: var(--ink);
+        }
+
+        .markdown blockquote {
+          clear: both;
+          margin: 16px 0 24px;
+          padding: 0 0 0 24px;
+          border-left: 1px solid var(--accent2);
+          background: transparent;
+        }
+
+        .markdown blockquote p {
+          margin: 0;
+          font-size: 10.8pt;
+          font-style: italic;
+          line-height: 1.8;
+          color: var(--ink);
+        }
+
+        .markdown ul,
+        .markdown ol {
           padding-left: 20px;
           margin-bottom: 14px;
         }
 
-        li + li {
-          margin-top: 4px;
+        .markdown li {
+          margin-bottom: 4px;
+          font-size: 10.6pt;
+          line-height: 1.75;
+          color: var(--ink-sub);
         }
 
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          margin-bottom: 16px;
-          font-size: 10.5pt;
-        }
-
-        th,
-        td {
-          border-bottom: 1px solid var(--line);
-          padding: 8px 10px;
-          vertical-align: top;
-          text-align: left;
-        }
-
-        th {
-          color: var(--ink);
-          font-size: 9pt;
-          letter-spacing: 0.08em;
-          text-transform: uppercase;
-        }
-
-        a {
-          color: var(--accent);
+        .markdown a {
+          color: var(--accent2);
           text-decoration: none;
         }
 
-        hr {
-          border: 0;
-          border-top: 1px solid var(--line);
-          margin: 20px 0;
+        .markdown table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 16px;
         }
+
+        .markdown th,
+        .markdown td {
+          padding: 10px 12px;
+          text-align: left;
+          vertical-align: top;
+          border-bottom: 1px solid var(--line);
+          font-size: 10pt;
+          color: var(--ink-sub);
+        }
+
+        .markdown th {
+          font-size: 8pt;
+          font-weight: 400;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+          color: var(--ink-faint);
+        }
+
+        .markdown hr {
+          border: none;
+          height: 0;
+          margin: 36px 0;
+        }
+
+        .markdown hr::after {
+          content: "· · ·";
+          display: block;
+          text-align: center;
+          color: #bcc0cc;
+          letter-spacing: 0.4em;
+          font-size: 0.8rem;
+        }
+
       </style>
     </head>
     <body>
-      <main>${bodyHtml}</main>
+      <main>
+        <article class="document">
+          <img class="avatarDoc" src="data:image/jpeg;base64,${avatarDataUrl}" alt="Deniss Muhla" />
+          <div class="markdown">${structuredHtml}</div>
+        </article>
+      </main>
     </body>
   </html>`;
 }
