@@ -23,7 +23,8 @@ The site is a single-page experience with the CV embedded in the main page. The 
 ## CV Source
 
 - Canonical CV markdown: `resources/cv/source/cv.md`
-- Original imported CV documents: `resources/cv/source/original/`
+- Public career facts, skills and source policy: [resources/README.md](resources/README.md)
+- Detailed supporting documents are stored outside this public repository.
 - Generated download artifact: `public/downloads/deniss-muhla-cv.pdf`
 
 ## Deployment
