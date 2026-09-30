@@ -1,12 +1,17 @@
-import { useEffect, useRef, type MouseEvent } from "react";
+import { lazy, Suspense, useEffect, useRef, type MouseEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { profile } from "../data/content";
+import { OfflineBadge } from "../offline/OfflineBadge";
 import heroPhoto from "../../resources/photo/hero-photo.jpg";
 import cvPhoto from "../../resources/photo/cv-photo.jpg";
 import cvMarkdown from "../../resources/cv/source/cv.md?raw";
 import styles from "./Page.module.css";
+
+const VoiceChat = lazy(() =>
+  import("../chat/VoiceChat").then((module) => ({ default: module.VoiceChat })),
+);
 
 function scrollToCv(e: MouseEvent<HTMLAnchorElement>) {
   e.preventDefault();
@@ -61,6 +66,7 @@ export function Page() {
 
   return (
     <div ref={rootRef} className={styles.root} data-at-top="">
+      <OfflineBadge />
       {/* ── Scroll arrows ── */}
       <span className={styles.arrowDown} aria-hidden="true" />
       <span className={styles.arrowUp} aria-hidden="true" />
@@ -125,6 +131,11 @@ export function Page() {
           </div>
         </article>
       </section>
+
+      {/* ── On-device voice assistant ── */}
+      <Suspense fallback={null}>
+        <VoiceChat />
+      </Suspense>
     </div>
   );
 }

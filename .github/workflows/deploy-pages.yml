@@ -29,15 +29,28 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
-      - name: Set up Vite+
-        uses: voidzero-dev/setup-vp@v1
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: "24"
-          cache: true
-          run-install: true
+          cache: pnpm
 
-      - name: Build static site
-        run: vp run build
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Run browser-free tests
+        run: pnpm test
+
+      - name: Build static site and typecheck
+        run: pnpm build
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'

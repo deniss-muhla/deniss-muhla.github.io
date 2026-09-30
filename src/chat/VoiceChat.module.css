@@ -1,0 +1,449 @@
+.widget {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.widget > * {
+  pointer-events: auto;
+}
+
+/* ── Floating action button ── */
+
+.fab {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
+  color: var(--ink);
+  box-shadow: 0 16px 40px color-mix(in srgb, var(--bg-panel) 55%, transparent);
+  backdrop-filter: blur(14px) saturate(130%);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+  cursor: pointer;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.fab:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+}
+
+.fab:focus-visible {
+  outline: 2px solid var(--accent2);
+  outline-offset: 3px;
+}
+
+.widget[data-open] .fab {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+
+.icon {
+  width: 28px;
+  height: 28px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.spark {
+  opacity: 0.5;
+}
+
+/* ── Progress ring ── */
+
+.ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  overflow: visible;
+}
+
+.ringTrack,
+.ringValue {
+  fill: none;
+  stroke-width: 3;
+}
+
+.ringTrack {
+  stroke: color-mix(in srgb, var(--line) 60%, transparent);
+  opacity: 0;
+  transition: opacity 240ms ease;
+}
+
+.ringValue {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  transition:
+    stroke-dashoffset 320ms ease,
+    opacity 320ms ease;
+}
+
+.fab[data-loading] .ringTrack {
+  opacity: 1;
+}
+
+.ringValue[data-hidden] {
+  opacity: 0;
+}
+
+/* One-shot attention pulse when models finish loading while the chat is closed. */
+.fab[data-blink] {
+  animation: fab-blink 900ms ease-in-out 2;
+}
+
+.fab[data-blink] .ringValue {
+  animation: ring-blink 900ms ease-in-out 2;
+  opacity: 1;
+}
+
+@keyframes fab-blink {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+@keyframes ring-blink {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+.progressBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 22px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: color-mix(in srgb, var(--bg) 92%, black);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.6rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+
+/* ── Chat panel ── */
+
+.panel {
+  width: min(390px, calc(100vw - 32px));
+  max-height: min(72vh, 560px);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 18px 14px;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--bg-panel) 94%, transparent);
+  box-shadow: 0 26px 70px color-mix(in srgb, var(--bg-panel) 60%, transparent);
+  backdrop-filter: blur(20px) saturate(130%);
+  -webkit-backdrop-filter: blur(20px) saturate(130%);
+  opacity: 0;
+  transform: translateY(14px) scale(0.98);
+  transform-origin: bottom right;
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease;
+  pointer-events: none;
+}
+
+.widget[data-open] .panel {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.headerText {
+  min-width: 0;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.title {
+  margin: 0;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.25rem;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.closeButton {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-sub);
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease;
+}
+
+.closeButton:hover {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--line) 80%, transparent);
+}
+
+.closeButton svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 12px 0 10px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.01em;
+  color: var(--ink-faint);
+}
+
+.statusDot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ink-faint) 70%, transparent);
+}
+
+.status[data-state="listening"] .statusDot {
+  background: var(--accent2);
+  animation: listening-pulse 1.4s ease-in-out infinite;
+}
+
+.status[data-state="thinking"] .statusDot,
+.status[data-state="speaking"] .statusDot {
+  background: var(--accent);
+  animation: listening-pulse 900ms ease-in-out infinite;
+}
+
+.status[data-state="error"] .statusDot {
+  background: #e78284;
+}
+
+@keyframes listening-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.35;
+    transform: scale(0.75);
+  }
+}
+
+/* ── Messages ── */
+
+.messages {
+  flex: 1;
+  min-height: 132px;
+  max-height: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  overflow-y: auto;
+  padding: 4px 2px 6px;
+  scrollbar-width: thin;
+}
+
+.about {
+  margin: 0 0 2px;
+  padding: 9px 12px;
+  border: 1px dashed color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 14px;
+  font-size: 0.74rem;
+  line-height: 1.55;
+  color: var(--ink-faint);
+}
+
+.message {
+  max-width: 88%;
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 14px;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.user {
+  align-self: flex-end;
+  border-bottom-right-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 22%, var(--bg-panel));
+  color: var(--ink);
+}
+
+.assistant {
+  align-self: flex-start;
+  border-bottom-left-radius: 4px;
+  background: color-mix(in srgb, var(--line) 26%, transparent);
+  color: var(--ink-sub);
+}
+
+.statusMessage {
+  align-self: center;
+  max-width: 100%;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.62rem;
+  text-align: center;
+  color: #e78284;
+  background: color-mix(in srgb, #e78284 12%, transparent);
+}
+
+.message[data-pending] {
+  opacity: 0.72;
+}
+
+.message[data-pending]::after {
+  content: "▍";
+  margin-left: 2px;
+  animation: caret 1s steps(2, start) infinite;
+}
+
+@keyframes caret {
+  0%,
+  100% {
+    opacity: 0;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ── Composer ── */
+
+.composer {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 64%, transparent);
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--line) 84%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+  color: var(--ink);
+  font-size: 0.8rem;
+}
+
+.input::placeholder {
+  color: var(--ink-faint);
+}
+
+.input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
+}
+
+.send {
+  flex: none;
+  padding: 9px 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--ink);
+  font-size: 0.76rem;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    opacity 160ms ease;
+}
+
+.send:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@media (max-width: 520px) {
+  .widget {
+    right: 14px;
+    bottom: 14px;
+  }
+
+  .panel {
+    max-height: 66vh;
+  }
+
+  .messages {
+    max-height: 40vh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fab,
+  .panel,
+  .ringValue,
+  .statusDot {
+    transition: none;
+    animation: none;
+  }
+}

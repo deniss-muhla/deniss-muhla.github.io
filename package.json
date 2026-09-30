@@ -4,14 +4,21 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vp dev",
+    "dev": "vite",
     "typecheck": "tsc -b",
     "cv:build": "node ./scripts/cv-pipeline.mjs",
-    "build": "vp run typecheck && vp build",
-    "build:site": "tsc -b && vp build",
-    "preview:site": "vp preview"
+    "build": "tsc -b && vite build",
+    "build:site": "tsc -b && vite build",
+    "preview:site": "vite preview",
+    "test": "node --test test/cv-context.test.ts test/cv-model-evaluate.test.ts test/transcript.test.ts test/voice-qa-checks.test.ts test/voice-qa-privacy.test.ts",
+    "test:browser": "node --test test/cv-model-evaluate.integration.test.ts",
+    "cv:smoke": "node scripts/cv-model-evaluate.ts",
+    "lint": "oxlint"
   },
   "dependencies": {
+    "@mlc-ai/web-llm": "^0.2.85",
+    "@moonshine-ai/moonshine-wasm": "^0.1.5",
+    "pocket-tts-js": "^0.1.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
@@ -22,18 +29,13 @@
     "@types/react": "^19.2.3",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "oxlint": "1.85.0",
+    "playwright-core": "^1.63.0",
     "puppeteer": "^24.31.0",
     "remark": "^15.0.1",
     "remark-html": "^16.0.1",
     "typescript": "6.0.2",
-    "vite": "npm:@voidzero-dev/vite-plus-core@latest",
-    "vite-plus": "latest"
+    "vite": "8.3.1"
   },
-  "packageManager": "pnpm@10.33.0",
-  "pnpm": {
-    "overrides": {
-      "vite": "npm:@voidzero-dev/vite-plus-core@latest",
-      "vitest": "npm:@voidzero-dev/vite-plus-test@latest"
-    }
-  }
+  "packageManager": "pnpm@10.33.0"
 }
