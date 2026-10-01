@@ -3,14 +3,16 @@
  *
  * Models (downloaded once, then cached by the browser; all inference runs locally):
  *  - STT: Moonshine Tiny Streaming (34M) via @moonshine-ai/moonshine-wasm
- *  - LLM: SmolLM2-360M-Instruct via WebLLM (WebGPU)
+ *  - LLM: TRLM-135M q4f32_1 via WebLLM (WebGPU), converted from
+ *    `Shekswess/trlm-135m` and served from this repository
+ *  - LLM preview: a pair named in the page URL instead of the shipped one
  *  - TTS: Pocket TTS INT8 via pocket-tts-js (WASM worker)
  *
  * No embeddings and no retrieval: the public CV markdown is passed to the model
  * as plain prompt context.
  */
 import type { MicTranscriber, TranscriptLine } from "@moonshine-ai/moonshine-wasm";
-import type { MLCEngine } from "@mlc-ai/web-llm";
+import type { AppConfig, MLCEngine } from "@mlc-ai/web-llm";
 import type { PocketTTS, StreamingPlayer } from "pocket-tts-js";
 
 import { buildPromptMessages, cleanAnswer, cleanForDisplay } from "./cv-context";
@@ -54,9 +56,137 @@ export function trace(...args: unknown[]): void {
   if (!debugEnabled) return;
   console.info("[voice]", ...args);
 }
-const LLM_MODEL_F16 = "SmolLM2-360M-Instruct-q4f16_1-MLC";
-const LLM_MODEL_F32 = "SmolLM2-360M-Instruct-q4f32_1-MLC";
 const PROGRESS_WEIGHTS: Record<ModelKey, number> = { stt: 0.18, tts: 0.27, llm: 0.55 };
+
+/** The models a session needs, smallest first. */
+const REQUIRED_MODELS: ModelKey[] = ["stt", "tts", "llm"];
+
+/**
+ * Production answer model.
+ *
+ * TRLM-135M `q4f32_1`, converted from `Shekswess/trlm-135m` at revision
+ * `eb6adefde3066b2555a4f88aae9843fcb528d87a` and served from this repository, so
+ * a visitor downloads it from the site instead of a model host. The quantized
+ * pair needs no `shader-f16`, so one set of bytes serves every WebGPU adapter.
+ * `PROVENANCE.md` beside the assets records the digests, the notices and the
+ * unresolved upstream notice chain.
+ *
+ * The path assumes this site is served from the domain root: the project sets
+ * no Vite `base`, so `BASE_URL` is `/`. WebLLM rewrites a weights URL that has no
+ * `resolve/<revision>/` segment to end in `resolve/main/`, so the path names
+ * that segment explicitly and the assets stay in one flat directory.
+ */
+const LLM_MODEL_ID = "trlm-135m-q4f32_1";
+const LLM_MODEL_PATH = `${import.meta.env.BASE_URL}models/trlm-135m/resolve/main/`;
+const LLM_LIBRARY_NAME = `${LLM_MODEL_ID}-webgpu.wasm`;
+
+/** A model served over http(s): its weights directory and compiled library. */
+export type ModelPair = { modelId: string; modelUrl: string; libraryUrl: string };
+
+/**
+ * The shipped pair as the current page can reach it.
+ *
+ * WebLLM builds URLs from these fields with `new URL()`, which needs an
+ * absolute base, so the page origin is added when the pair is asked for rather
+ * than while this module is being loaded.
+ */
+function productionPair(): ModelPair {
+  return {
+    modelId: LLM_MODEL_ID,
+    modelUrl: `${window.location.origin}${LLM_MODEL_PATH}`,
+    libraryUrl: `${window.location.origin}${LLM_MODEL_PATH}${LLM_LIBRARY_NAME}`,
+  };
+}
+
+/**
+ * Non-production answer-model preview.
+ *
+ * `?llmPreview=1` opts in, `?llmModelUrl=` and `?llmWasmUrl=` say where the pair
+ * is served from, which lets someone try other bytes against the shipped
+ * assistant without changing this repository. Both URLs have to sit on the
+ * page's own origin: the site is cross-origin isolated and served over https,
+ * so another origin would be mixed content or a blocked fetch, and a link from a
+ * third party must not be able to choose the bytes this site downloads, executes
+ * and caches. Nothing is stored, so leaving the preview is removing `llmPreview`
+ * from the URL and reloading: every load without it keeps the production pair.
+ */
+export const PREVIEW_FLAG = "llmPreview";
+const PREVIEW_MODEL_ID = "trlm-135m-q4f32_1";
+const PREVIEW_MODEL_URL = "llmModelUrl";
+const PREVIEW_LIBRARY_URL = "llmWasmUrl";
+
+export type PreviewRequest =
+  | { state: "off" }
+  | { state: "incomplete"; modelId: string; missing: string }
+  | { state: "on"; modelId: string; modelUrl: string; libraryUrl: string };
+
+/**
+ * A previewed asset URL has to be absolute, on the page's own origin, and
+ * without a query or a fragment. WebLLM 0.2.85 concatenates the weights URL
+ * with the relative name of every file it fetches and resolves the config
+ * against it, so a query or a fragment would end up inside an asset path.
+ */
+function isAssetUrl(value: string, suffix: string, origin: string): boolean {
+  try {
+    const url = new URL(value);
+    return (url.protocol === "https:" || url.protocol === "http:") &&
+      url.origin === origin && url.search === "" && url.hash === "" &&
+      url.pathname.endsWith(suffix);
+  } catch {
+    return false;
+  }
+}
+
+/** Reads the preview request from a page query string. Never stores anything. */
+export function previewRequest(search: string, origin: string): PreviewRequest {
+  const params = new URLSearchParams(search);
+  const flag = params.get(PREVIEW_FLAG);
+  if (flag !== "1" && flag !== "true") return { state: "off" };
+
+  const modelUrl = params.get(PREVIEW_MODEL_URL) ?? "";
+  const libraryUrl = params.get(PREVIEW_LIBRARY_URL) ?? "";
+  const missing = [
+    ...(isAssetUrl(modelUrl, "/", origin) ? [] : [PREVIEW_MODEL_URL]),
+    ...(isAssetUrl(libraryUrl, ".wasm", origin) ? [] : [PREVIEW_LIBRARY_URL]),
+  ];
+  if (missing.length > 0) {
+    return { state: "incomplete", modelId: PREVIEW_MODEL_ID, missing: missing.join(" and ") };
+  }
+  return { state: "on", modelId: PREVIEW_MODEL_ID, modelUrl, libraryUrl };
+}
+
+/** The previewed pair, or null for the production model. Reports missing inputs. */
+function llmPreview(): Extract<PreviewRequest, { state: "on" }> | null {
+  if (typeof window === "undefined") return null;
+  const request = previewRequest(window.location.search, window.location.origin);
+  if (request.state === "incomplete") {
+    throw new Error(
+      `The ${request.modelId} preview needs ${request.missing} in the page URL, ` +
+        "as absolute same-origin URLs without a query or a fragment.",
+    );
+  }
+  return request.state === "on" ? request : null;
+}
+
+/**
+ * Registers a pair with WebLLM. The vendor model-list shape and the URLs stay
+ * here, inside the engine boundary.
+ */
+function localAppConfig(pair: ModelPair): AppConfig {
+  return {
+    model_list: [
+      {
+        model: pair.modelUrl,
+        model_lib: pair.libraryUrl,
+        model_id: pair.modelId,
+        // No vram_required_MB: WebLLM 0.2.85 only carries the field as registry
+        // metadata and never reads it, so a number here would be a guess.
+        required_features: [],
+      },
+    ],
+    cacheBackend: "cache",
+  };
+}
 
 export type Capabilities = {
   webGpu: boolean;
@@ -162,9 +292,9 @@ class VoiceEngine {
   private ttsPromise: Promise<void> | null = null;
   private audioContext: AudioContext | null = null;
   private llm: MLCEngine | null = null;
-  private llmModelId: string | null = null;
+  private llmPair: ModelPair | null = null;
   private llmPromise: Promise<void> | null = null;
-  private prefetchPromise: Promise<void> | null = null;
+  private loadPromise: Promise<void> | null = null;
 
   subscribe(listener: (progress: ModelProgress, states: ModelStates) => void): () => void {
     this.listeners.add(listener);
@@ -212,7 +342,21 @@ class VoiceEngine {
   }
 
   get modelLabel(): string {
-    return this.llmModelId ?? (this.capabilities?.shaderF16 ? LLM_MODEL_F16 : LLM_MODEL_F32);
+    return this.llmPair?.modelId ?? LLM_MODEL_ID;
+  }
+
+  /**
+   * Where the answer model is served from, so a check can compare the loaded
+   * bytes against the recorded digests. Null until a model is ready.
+   */
+  get llmAssets(): ModelPair | null {
+    return this.llmPair;
+  }
+
+  /** What the current URL asks for, for the interface to show or explain. */
+  get preview(): PreviewRequest {
+    if (typeof window === "undefined") return { state: "off" };
+    return previewRequest(window.location.search, window.location.origin);
   }
 
   setSttHandlers(handlers: SttHandlers): void {
@@ -225,20 +369,33 @@ class VoiceEngine {
     return this.capabilities;
   }
 
-  /** Loads all three models in the background, smallest first. */
-  async prefetch(): Promise<void> {
-    if (this.prefetchPromise) return this.prefetchPromise;
+  /**
+   * Loads the models a session needs, smallest first.
+   *
+   * The models are marked loading before the first await, so an interface that
+   * starts this on an explicit action shows lifecycle progress instead of an
+   * unexplained wait, and the percentages stay the libraries' own events. A
+   * model that cannot load does not stop the others; the interface names what
+   * is missing and typed input keeps working. Safe to call repeatedly: a model
+   * that is already ready or already loading is reused.
+   */
+  async loadRequiredModels(): Promise<void> {
+    if (this.loadPromise) return this.loadPromise;
 
-    this.prefetchPromise = (async () => {
+    for (const key of REQUIRED_MODELS) {
+      if (this.states[key] !== "ready") this.setState(key, "loading");
+    }
+
+    this.loadPromise = (async () => {
       this.capabilities ??= await detectCapabilities();
       await this.ensureStt().catch(() => undefined);
       await this.ensureTts().catch(() => undefined);
       await this.ensureLlm().catch(() => undefined);
     })().finally(() => {
-      this.prefetchPromise = null;
+      this.loadPromise = null;
     });
 
-    return this.prefetchPromise;
+    return this.loadPromise;
   }
 
   async ensureStt(): Promise<void> {
@@ -365,24 +522,24 @@ class VoiceEngine {
         throw new Error("The answer model needs WebGPU, which this browser does not provide.");
       }
 
-      const modelId = this.capabilities.shaderF16 ? LLM_MODEL_F16 : LLM_MODEL_F32;
+      const pair = llmPreview() ?? productionPair();
       this.setState("llm", "loading");
 
-      const { CreateMLCEngine, prebuiltAppConfig } = await import("@mlc-ai/web-llm");
-      const engine = await CreateMLCEngine(modelId, {
+      const { CreateMLCEngine } = await import("@mlc-ai/web-llm");
+      const engine = await CreateMLCEngine(pair.modelId, {
+        appConfig: localAppConfig(pair),
         // The Cache API backend avoids the concurrent IndexedDB write race.
-        appConfig: { ...prebuiltAppConfig, cacheBackend: "cache" },
         initProgressCallback: (report) => this.setProgress("llm", report.progress ?? 0),
       });
 
       this.llm = engine;
-      this.llmModelId = modelId;
+      this.llmPair = pair;
       this.setProgress("llm", 1);
       this.setState("llm", "ready");
     })()
       .catch((error: unknown) => {
         this.llm = null;
-        this.llmModelId = null;
+        this.llmPair = null;
         this.setState("llm", "error");
         throw error;
       })
@@ -436,6 +593,10 @@ class VoiceEngine {
       options.onSpeakingChange?.(true);
       try {
         await this.speak(cleaned, { isCurrent });
+      } catch (error) {
+        // Speech output is an addition, not the answer: a visitor who cannot
+        // hear it still gets the text, which is the accessible path.
+        trace("speak failed", error instanceof Error ? error.message : String(error));
       } finally {
         options.onSpeakingChange?.(false);
       }

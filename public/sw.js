@@ -12,7 +12,8 @@
  *    use, plus the third-party assets the local voice stack needs at runtime
  *    (ONNX Runtime from jsDelivr, Google Fonts). Model weights are cached by the
  *    libraries themselves (Moonshine / Pocket TTS / WebLLM use Cache Storage),
- *    so this worker deliberately does not duplicate those downloads.
+ *    so this worker deliberately does not duplicate those downloads, including
+ *    the same-origin answer model served from /models/.
  *
  * Update VERSION when the caching strategy changes; stale caches are pruned on
  * activation. Hashed Vite assets are immutable and served cache-first, while
@@ -79,6 +80,10 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
 
   if (url.origin === self.location.origin) {
+    // The answer model is served same-origin from /models/ and cached by the
+    // runtime's own Cache Storage, so the worker passes it straight through
+    // instead of keeping a second copy of it here.
+    if (url.pathname.startsWith("/models/")) return;
     event.respondWith(handleSameOrigin(request, url));
     return;
   }

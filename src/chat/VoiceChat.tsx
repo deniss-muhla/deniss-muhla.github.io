@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { GREETING, INTRO } from "./cv-context";
-import { trace, voiceEngine, type ModelProgress, type ModelStates } from "./engine";
+import { PREVIEW_FLAG, trace, voiceEngine, type ModelProgress, type ModelStates } from "./engine";
 import { mergeTranscript } from "./transcript";
 import styles from "./VoiceChat.module.css";
 
@@ -28,6 +28,7 @@ export function VoiceChat() {
   const [asked, setAsked] = useState(false);
 
   const openRef = useRef(open);
+  const preview = voiceEngine.preview;
   const greetingSentRef = useRef(false);
   const revisionRef = useRef(0);
   const finalizedTurnRef = useRef("");
@@ -237,7 +238,7 @@ export function VoiceChat() {
     });
   }, [appendMessage, currentTurnText, renderTurnBubble, scheduleCommit, stopAssistantWork, updateMessage]);
 
-  // Subscribe to model progress and prefetch models once the page is idle.
+  // Subscribe to model progress and start loading once the page is idle.
   useEffect(() => {
     const unsubscribe = voiceEngine.subscribe((nextProgress, nextStates) => {
       setProgress(nextProgress);
@@ -246,12 +247,13 @@ export function VoiceChat() {
 
     const startPrefetch = async () => {
       const capabilities = await voiceEngine.detectOnce();
-      // Respect metered connections: load on first interaction instead.
+      // Respect metered connections: nothing downloads without a click. Opening
+      // the assistant below starts the same load from the visitor's own action.
       if (capabilities.saveData) {
-        setNotice("Models are not preloaded on metered connections. They will load when you open the chat.");
+        setNotice("Models are not preloaded on metered connections. They load when you open the chat.");
         return;
       }
-      void voiceEngine.prefetch();
+      void voiceEngine.loadRequiredModels();
     };
 
     let idleId: number | null = null;
@@ -339,6 +341,10 @@ export function VoiceChat() {
       if (next) {
         setNotice(null);
         void voiceEngine.resumeAudio();
+        // A metered session skipped the background load, so opening the panel is
+        // the visitor's explicit request for these models. Starting here is what
+        // keeps the panel from waiting on a download nobody asked for.
+        void voiceEngine.loadRequiredModels();
       } else {
         cancelPauseTimer();
         resetTurnText();
@@ -379,7 +385,18 @@ export function VoiceChat() {
       if (states.tts === "loading") return `Loading speech output · ${formatPercent(progress.tts)}`;
       return `Loading answer model · ${formatPercent(progress.llm)}`;
     }
-    if (!ready) return "Voice assistant unavailable.";
+    if (!ready) {
+      if (states.llm === "error") {
+        return "The answer model is unavailable here. It needs WebGPU; reloading may help.";
+      }
+      if (states.stt === "error") {
+        return "Speech recognition is unavailable here. Type your question instead.";
+      }
+      if (states.tts === "error") {
+        return "Speech output is unavailable here. Answers will appear as text.";
+      }
+      return "Voice assistant unavailable.";
+    }
     if (turn === "listening") return "Listening — speak or type.";
     if (turn === "thinking") return "Thinking…";
     if (turn === "speaking") return "Speaking…";
@@ -435,6 +452,14 @@ export function VoiceChat() {
             </p>
           ))}
         </div>
+
+        {preview.state !== "off" ? (
+          <p className={styles.about} data-testid="preview-notice">
+            {preview.state === "incomplete"
+              ? `Preview model ${preview.modelId} needs ${preview.missing} in the page URL, as absolute same-origin URLs without a query or a fragment.`
+              : `The page URL points this session at the ${preview.modelId} pair it names instead of the assets this site ships. Remove ${PREVIEW_FLAG} from the page URL and reload to go back.`}
+          </p>
+        ) : null}
 
         <form className={styles.composer} onSubmit={handleSend}>
           <input

@@ -15,6 +15,11 @@ function mockRuntime(scenario: Scenario): Plugin {
   const emptyOutput = scenario === "empty-output";
   const engine = `export const voiceEngine = {
     modelLabel: "smoke-model",
+    llmAssets: {
+      modelId: "smoke-model",
+      modelUrl: "https://model.test/smoke/",
+      libraryUrl: "https://wasm.test/smoke.wasm"
+    },
     ensureLlm: async () => { if (${throwAtLoad}) throw new Error(${JSON.stringify(failureMarker)}); },
     ask: async () => { if (${throwAtGeneration}) throw new Error(${JSON.stringify(failureMarker)}); return ${emptyOutput ? '"  "' : '"private answer"'}; }
   };`;
@@ -24,14 +29,9 @@ function mockRuntime(scenario: Scenario): Plugin {
     enforce: "pre",
     resolveId(source, importer) {
       if (source === "../src/chat/engine" && importer?.endsWith("scripts/cv-model-page.ts")) return "\0smoke-engine";
-      if (source === "@mlc-ai/web-llm") return "\0smoke-web-llm";
     },
     load(id) {
       if (id === "\0smoke-engine") return engine;
-      if (id === "\0smoke-web-llm") return `export const prebuiltAppConfig = { model_list: [{
-        model_id: "smoke-model", model: "https://model.test/smoke/", model_lib: "https://wasm.test/smoke.wasm",
-        required_features: []
-      }] };`;
     },
     configureServer(server) {
       server.middlewares.use((request, response, next) => {

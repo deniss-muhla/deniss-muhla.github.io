@@ -1,4 +1,3 @@
-import { prebuiltAppConfig } from "@mlc-ai/web-llm";
 import { voiceEngine } from "../src/chat/engine";
 
 type SmokePage = Window["__cvSmoke"];
@@ -9,18 +8,18 @@ async function loadedModel() {
 
   const shaderF16 = adapter.features.has("shader-f16");
   await voiceEngine.ensureLlm();
+  // The engine reports where the pair is served from; the prebuilt registry is
+  // not involved, because the site ships the pair itself.
+  const assets = voiceEngine.llmAssets;
+  if (!assets) throw new Error("model-identity-unavailable");
   const modelId = voiceEngine.modelLabel;
-  const entry = prebuiltAppConfig.model_list.find((model) => model.model_id === modelId);
-  if (!entry || (shaderF16 && !entry.required_features?.includes("shader-f16")) ||
-      (!shaderF16 && entry.required_features?.includes("shader-f16"))) {
-    throw new Error("model-identity-mismatch");
-  }
+  if (modelId !== assets.modelId) throw new Error("model-identity-mismatch");
 
   const cachedAssets: Array<{ url: string; sha256: string; bytes: number }> = [];
   for (const cacheName of await caches.keys()) {
     const cache = await caches.open(cacheName);
     for (const request of await cache.keys()) {
-      if (!request.url.startsWith(entry.model) && request.url !== entry.model_lib) continue;
+      if (!request.url.startsWith(assets.modelUrl) && request.url !== assets.libraryUrl) continue;
       const response = await cache.match(request);
       if (!response) continue;
       const bytes = await response.arrayBuffer();
@@ -32,15 +31,15 @@ async function loadedModel() {
       });
     }
   }
-  if (!cachedAssets.some((asset) => asset.url === entry.model_lib) ||
-      !cachedAssets.some((asset) => asset.url.startsWith(entry.model) && asset.url !== entry.model)) {
+  if (!cachedAssets.some((asset) => asset.url === assets.libraryUrl) ||
+      !cachedAssets.some((asset) => asset.url.startsWith(assets.modelUrl) && asset.url !== assets.modelUrl)) {
     throw new Error("cached-artifact-identity-unverified");
   }
 
   return {
     modelId,
-    modelUrl: entry.model,
-    wasmUrl: entry.model_lib,
+    modelUrl: assets.modelUrl,
+    wasmUrl: assets.libraryUrl,
     cachedAssets,
     shaderF16,
     gpuFeatures: [...adapter.features].sort(),

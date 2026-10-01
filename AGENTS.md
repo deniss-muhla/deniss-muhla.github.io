@@ -292,14 +292,32 @@ from and the on-device voice assistant embedded in the page.
 
 ## 19. Keep fixtures and generated assets out of version control
 
-- Large binaries and generated trees stay out of Git: model weights, the vendored Moonshine
-  runtime, the generated CV PDF, browser profiles and build output.
-- Keep the generator and its inputs in the repository, and document the exact command that
-  recreates the artifact.
+- Large binaries and generated trees stay out of Git: model weights other than the
+  exact verified TRLM deployment pair below, the vendored Moonshine runtime, the
+  generated CV PDF, browser profiles and build output.
+- Only the verified browser-deployment pair for `Shekswess/trlm-135m` at revision
+  `eb6adefde3066b2555a4f88aae9843fcb528d87a` may be added under
+  `public/models/trlm-135m/`, and only after candidate stages 3.1.1-3.1.4, 3.2
+  and 3.3 pass. The exception covers converted MLC parameter shards, matching
+  config/tokenizer, compatible WebGPU library, and required license/attribution
+  notices and concise provenance. Before copying, verify source/tool/output
+  provenance, hashes and sizes, redistribution rights, and a successful headed
+  Chrome/WebGPU load of the exact pair in WebLLM 0.2.85. Keep each file under
+  GitHub's 100 MiB limit and the total within current Pages site-size limits. Use
+  MLC-supported sharding if needed; never use Git LFS as a Pages delivery
+  workaround. Keep the 269,062,856-byte BF16 source checkpoint and the pinned
+  Python/MLC/TVM/Emscripten toolchain in an isolated external environment; do
+  not add these tools to the frontend manifest or install them as root or
+  system-wide. Keep caches, profiles and all intermediates/build trees outside
+  Git. This exception does not cover other models or private originals and does
+  not authorize staging, committing, pushing, publishing or archiving.
+- For generated artifacts without a documented exception, keep the generator and
+  its inputs in the repository, and document the exact command that recreates
+  the artifact.
 - Store test media such as the fake microphone WAV outside the repository, and document how to
   create it. Do not commit large audio or image fixtures.
-- Model downloads are browser caches, not repository assets. A check that needs a model must
-  either tolerate a cold cache or state the required warm state explicitly.
+- Other model downloads are browser caches, not repository assets. A check that needs a
+  model must either tolerate a cold cache or state the required warm state explicitly.
 - Third-party content used in checks must be public-domain or licensed, with its source
   recorded, and kept outside the repository when large.
 
