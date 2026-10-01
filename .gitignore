@@ -15,6 +15,10 @@ dist-ssr
 public/downloads/*.pdf
 
 # Editor directories and files
+# Pi local project configuration
+/.pi/
+/.agents/
+/openspec/
 .vscode/*
 !.vscode/extensions.json
 .idea
