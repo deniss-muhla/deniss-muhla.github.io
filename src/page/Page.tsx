@@ -78,12 +78,11 @@ export function Page() {
           </h1>
           <hr className={styles.heroRule} />
           <p className={styles.heroBio}>
-            Senior front-end engineer building design systems, <br />
-            scalable UI architecture, React platforms, <br />
-            and AI-assisted tooling.
+            Senior front-end engineer building React and TypeScript applications,
+            reusable UI components, and AI-assisted development workflows.
             <br />
-            Nineteen years shaping interfaces across European and North American
-            products.
+            Hands-on development, architecture, and technical leadership across
+            European and North American products.
           </p>
 
           <nav className={styles.heroLinks}>
