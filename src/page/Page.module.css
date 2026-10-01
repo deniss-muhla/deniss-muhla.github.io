@@ -236,17 +236,20 @@
 
 .arrowDown,
 .arrowUp {
+  --arrow-tap: 0px;
   position: fixed;
   left: 50%;
   width: 32px;
   height: 32px;
+  padding: 0;
+  border: none;
   transform: translateX(-50%);
-  /* border-radius: 50%; */
-  background: color-mix(in srgb, var(--ink) 60%, var(--bg) 15%);
-  box-shadow: 0 12px 34px color-mix(in srgb, var(--bg-panel) 34%, transparent);
-  pointer-events: none;
+  background: none;
   z-index: 90;
   opacity: 0.5;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .arrowDown {
@@ -262,11 +265,15 @@
 .arrowUp::before {
   content: "";
   position: absolute;
-  inset: 0;
-  background: var(--bg);
+  /* Inset by the extra tap-target padding so the 32px visual stays put. */
+  inset: var(--arrow-tap);
+  border-radius: 4px;
+  background-color: color-mix(in srgb, var(--ink) 60%, var(--bg) 15%);
+  box-shadow: 0 12px 34px color-mix(in srgb, var(--bg-panel) 34%, transparent);
   background-repeat: no-repeat;
   background-position: center;
   background-size: 80% 80%;
+  transition: background-color 180ms ease;
   animation: arrow-pulse 1.8s ease-in-out infinite;
 }
 
@@ -295,17 +302,50 @@
   }
 }
 
-.root[data-at-top] .arrowUp {
-  opacity: 0;
-}
-
+.root[data-at-top] .arrowUp,
 .root[data-at-bottom] .arrowDown {
   opacity: 0;
 }
 
+.arrowDown:disabled,
+.arrowUp:disabled {
+  cursor: default;
+}
+
+.arrowDown:hover:not(:disabled)::before,
+.arrowUp:hover:not(:disabled)::before {
+  background-color: color-mix(in srgb, var(--ink) 72%, var(--bg) 8%);
+}
+
+.arrowDown:hover:not(:disabled),
+.arrowUp:hover:not(:disabled),
+.arrowDown:focus-visible,
+.arrowUp:focus-visible {
+  opacity: 1;
+}
+
+.arrowDown:focus-visible,
+.arrowUp:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.arrowDown:active:not(:disabled),
+.arrowUp:active:not(:disabled) {
+  transform: translateX(-50%) scale(0.94);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .arrowDown::before,
+  .arrowUp::before {
+    animation: none;
+  }
+}
+
 .arrowDown,
 .arrowUp {
-  transition: opacity 180ms ease;
+  transition: opacity 180ms ease, background-color 180ms ease,
+    transform 180ms ease;
 }
 
 /* ── CV Section ── */
@@ -391,6 +431,13 @@
 
 .markdown :global(*) {
   max-width: 100%;
+}
+
+.markdown :global(h1),
+.markdown :global(h2),
+.markdown :global(h3) {
+  /* Keep the sticky CV header from covering a heading scrolled into view. */
+  scroll-margin-top: 120px;
 }
 
 .markdown :global(h1) {
@@ -616,8 +663,10 @@
 
   .arrowDown,
   .arrowUp {
-    width: 42px;
-    height: 42px;
+    /* Grow the hit area to 44px while the 32px visual stays centred. */
+    --arrow-tap: 6px;
+    width: 44px;
+    height: 44px;
   }
 
   .arrowUp {
@@ -664,8 +713,9 @@
 
   .arrowDown,
   .arrowUp {
-    width: 36px;
-    height: 36px;
+    --arrow-tap: 6px;
+    width: 44px;
+    height: 44px;
   }
 
   .arrowUp {
