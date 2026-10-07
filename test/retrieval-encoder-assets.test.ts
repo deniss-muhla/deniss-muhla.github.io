@@ -166,14 +166,18 @@ guardedTest(buildOutput(buildOutputDir), "the built site emits no asyncify asset
 
 test("the shipped worker leaves the library it imports at the only level that prints nothing", async () => {
   // The worker configures its runtime while the module is being evaluated, so it is loaded as
-  // it ships, against a worker port it can talk to. The level is then read back from the
-  // library instance that module configured, which is the one the page downloads. No request
-  // is made, so nothing is fetched and no file is cached.
+  // it ships, against a worker port it can talk to and the origin a worker global names itself
+  // by. The level is then read back from the library instance that module configured, which is
+  // the one the page downloads. No request is made, so nothing is fetched and no file is cached.
   const scope = globalThis as { self?: unknown };
   const hadSelf = "self" in scope;
   const original = scope.self;
 
-  scope.self = { postMessage: (): void => undefined, addEventListener: (): void => undefined };
+  scope.self = {
+    postMessage: (): void => undefined,
+    addEventListener: (): void => undefined,
+    location: { origin: "https://example.test" },
+  };
 
   try {
     const library = await import("@huggingface/transformers");

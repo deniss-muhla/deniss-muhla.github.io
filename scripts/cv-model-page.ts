@@ -1,6 +1,6 @@
 import { voiceEngine, type Answer } from "../src/chat/engine";
 import type { EmbeddingIdentity } from "../src/chat/retrieval/index.ts";
-import { EXPECTED_EMBEDDING } from "../src/chat/retrieval/index.ts";
+import { MODEL_PATH_PREFIX } from "../src/chat/retrieval/index.ts";
 import { reviewedIndex } from "../src/chat/retrieval/reviewed-index.ts";
 import { ORT_ROUTE, ORT_RUNTIME_ASSETS } from "../src/chat/retrieval/encoder/runtime-assets.ts";
 
@@ -36,7 +36,7 @@ async function loadIndex(): Promise<{
 
 /**
  * Loads the pinned encoder through the engine's own entry point, then hashes what the load
- * produced: every cache entry at the pinned model revision (graph, tokenizer, config) and
+ * produced: every cache entry under the model's own route, graph, tokenizer and config, and
  * the two runtime files the project route serves, byte for byte against the recorded table.
  */
 async function loadEncoder(): Promise<{ assets: Array<{ url: string; sha256: string; bytes: number }>; loadMs: number }> {
@@ -46,7 +46,7 @@ async function loadEncoder(): Promise<{ assets: Array<{ url: string; sha256: str
   const loadMs = performance.now() - startedAt;
 
   const assets: Array<{ url: string; sha256: string; bytes: number }> = [];
-  const pinnedPrefix = `/${EXPECTED_EMBEDDING.model}/resolve/${EXPECTED_EMBEDDING.revision}/`;
+  const pinnedPrefix = MODEL_PATH_PREFIX;
 
   for (const cacheName of await caches.keys()) {
     const cache = await caches.open(cacheName);

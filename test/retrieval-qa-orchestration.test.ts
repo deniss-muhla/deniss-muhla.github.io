@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { ORT_ROUTE, ORT_RUNTIME_ASSETS, ORT_WASM_PATHS } from "../src/chat/retrieval/encoder/runtime-assets.ts";
-import { EXPECTED_EMBEDDING } from "../src/chat/retrieval/index.ts";
+import { EXPECTED_EMBEDDING, MODEL_PATH_PREFIX } from "../src/chat/retrieval/index.ts";
 import { CONFIDENCE, CONFIDENCE_MARGIN, RELEVANCE_FLOOR } from "../src/chat/retrieval/selection.ts";
 import { createCleanupLedger } from "../scripts/qa-deadlines.ts";
 import type { ObservedFailure, WorkloadGateInput } from "../scripts/retrieval-qa.mjs";
@@ -249,8 +249,8 @@ function pageAnswers(
       dimensions: EXPECTED_EMBEDDING.dimensions,
       loadMs: 12,
       runtimeVersion: "3.0.0",
-      remoteHost: "https://huggingface.co",
-      remotePathTemplate: `https://huggingface.co/{model}/resolve/${EXPECTED_EMBEDDING.revision}/`,
+      remoteHost: origin,
+      remotePathTemplate: `{model}/resolve/${EXPECTED_EMBEDDING.revision}/`,
       files: [],
     },
     progressReport: { events: 1, files: ["model_quantized.onnx"], lastPercent: 100 },
@@ -763,6 +763,33 @@ test("a known console error beside a matching request failure is expected and ke
 
   assert.equal(pair.entries.filter((entry) => entry.source === "console" && entry.disposition === "expected").length, 1);
   assert.equal(pair.unresolved.length, 1);
+});
+
+test("a `/models/` passthrough path and a worker-served runtime path keep their own offline reason", async () => {
+  const { classifyOfflinePhase } = await qa;
+  const modelPath = `${MODEL_PATH_PREFIX}config.json`;
+
+  const out = classifyOfflinePhase(
+    [
+      failure("console", { reason: "internet-disconnected", path: modelPath }),
+      failure("request", { reason: "internet-disconnected", path: modelPath }),
+      failure("console", { reason: "network-failed", path: ORT_WASM_PATHS.wasm }),
+      failure("request", { reason: "network-failed", path: ORT_WASM_PATHS.wasm }),
+    ],
+    OFFLINE,
+  );
+
+  assert.deepEqual(
+    out.expected.map((entry) => [entry.path, entry.classification]),
+    [
+      [modelPath, "model-passthrough-not-sw-cached"],
+      [modelPath, "model-passthrough-not-sw-cached"],
+      [ORT_WASM_PATHS.wasm, "sw-revalidation-without-network"],
+      [ORT_WASM_PATHS.wasm, "sw-revalidation-without-network"],
+    ],
+    "the reason follows the path class: the worker passes `/models/` through and serves the runtime file itself",
+  );
+  assert.equal(out.unresolved.length, 0, "both pairs are explained by the confirmed replay");
 });
 
 test("a request failure is expected on its own only in a confirmed offline replay", async () => {

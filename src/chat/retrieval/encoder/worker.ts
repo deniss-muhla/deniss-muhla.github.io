@@ -20,7 +20,7 @@
 import { AutoModel, AutoTokenizer, LogLevel, env } from "@huggingface/transformers";
 
 import { RetrievalError } from "../errors.ts";
-import { EXPECTED_EMBEDDING } from "../index.ts";
+import { EXPECTED_EMBEDDING, MODEL_ROUTE } from "../index.ts";
 import { TOKEN_CAP, readRequest, type EncoderResponse } from "./protocol.ts";
 import { assertModelIdentity, poolQueryVector, tokenOutputName } from "./pooling.ts";
 import { ORT_NUM_THREADS, ORT_PROXY, ORT_WASM_PATHS } from "./runtime-assets.ts";
@@ -91,13 +91,23 @@ function configureEnvironment(): void {
 
   if (wasm === undefined) throw new RetrievalError("model/onnx-backend-missing");
 
-  env.allowLocalModels = false;
-  env.allowRemoteModels = true;
+  // Every model byte comes from this origin: the library resolves each file under the pinned
+  // `/models/` route and refuses remote model URLs, so no request it builds leaves the site.
+  // The route table and the digests those bytes are pinned by live in `scripts/model-assets.mjs`.
+  env.allowLocalModels = true;
+  env.allowRemoteModels = false;
+  env.localModelPath = MODEL_ROUTE;
   env.useBrowserCache = true;
 
   // Revision-literal: the template holds no `{revision}` placeholder, so the library's own
-  // revision substitution is a no-op and its revision-less metadata probe lands here too.
+  // revision substitution is a no-op. Remote models are refused, so nothing resolves through
+  // it anymore; it stays the revision the reviewed index was scored against, and the identity
+  // check still reads that literal from here.
   env.remotePathTemplate = `{model}/resolve/${EXPECTED_EMBEDDING.revision}/`;
+
+  // The host field names the origin whose own route serves the bytes now, so a report says
+  // where the model actually came from instead of a remote nothing reaches.
+  env.remoteHost = self.location.origin;
 
   wasm.wasmPaths = { ...ORT_WASM_PATHS };
   wasm.numThreads = ORT_NUM_THREADS;

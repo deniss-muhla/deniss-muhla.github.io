@@ -25,7 +25,7 @@ function ready(overrides: Record<string, unknown> = {}): Record<string, unknown>
     dimensions: DIMENSIONS,
     loadMs: 12,
     runtimeVersion: EXPECTED_EMBEDDING.runtimeVersion,
-    remoteHost: "https://huggingface.co/",
+    remoteHost: "https://example.test",
     remotePathTemplate: `{model}/resolve/${EXPECTED_EMBEDDING.revision}/`,
     files: ["config.json", "tokenizer.json"],
     ...overrides,

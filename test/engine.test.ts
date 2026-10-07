@@ -71,7 +71,7 @@ function readyMessage(): Record<string, unknown> {
     dimensions: DIMENSIONS,
     loadMs: 20,
     runtimeVersion: EXPECTED_EMBEDDING.runtimeVersion,
-    remoteHost: "https://huggingface.co/",
+    remoteHost: "https://example.test",
     remotePathTemplate: `{model}/resolve/${EXPECTED_EMBEDDING.revision}/`,
     files: ["config.json"],
   };

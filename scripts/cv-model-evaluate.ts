@@ -8,7 +8,7 @@ import { chromium } from "playwright-core";
 import type { Browser, Page } from "playwright-core";
 import type { InlineConfig, ViteDevServer } from "vite";
 
-import { EXPECTED_EMBEDDING, readReviewedIndex } from "../src/chat/retrieval/index.ts";
+import { EXPECTED_EMBEDDING, MODEL_PATH_PREFIX, readReviewedIndex } from "../src/chat/retrieval/index.ts";
 import type { EmbeddingIdentity } from "../src/chat/retrieval/index.ts";
 import { ORT_RUNTIME_ASSETS, ORT_RUNTIME_VERSION, ORT_ROUTE } from "../src/chat/retrieval/encoder/runtime-assets.ts";
 import { crossOriginIsolationHeaders, onnxRuntimeServePlugin } from "../vite.config.ts";
@@ -81,10 +81,10 @@ function sha256(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-/** Requires a cached graph, tokenizer and config, each named by the pinned model's own URL. */
+/** Requires a cached graph, tokenizer and config, each named by the pinned model's own files. */
 function requireCachedKinds(assets: readonly SmokeAsset[]): void {
   const names = assets
-    .filter((asset) => asset.url.startsWith("https://huggingface.co/"))
+    .filter((asset) => asset.url.includes(MODEL_PATH_PREFIX))
     .map((asset) => asset.url.split("/").pop() ?? "");
 
   if (!names.some((name) => name.endsWith(".onnx"))) throw new Error("cached-graph-missing");

@@ -70,6 +70,14 @@ export type AskOptions = {
 };
 
 const TTS_VOICE = "alba";
+/**
+ * Same-origin bases for the shipped TTS pair. The vendor joins `language/file` onto
+ * `modelBaseUrl` after stripping one trailing slash and defaults `voicesUrl` to the same
+ * directory, and it loads the runtime from `ortBaseUrl` as given, so that one keeps its
+ * slash. `scripts/model-assets.mjs` pins the bytes these routes serve.
+ */
+const TTS_MODEL_BASE = "/models/pocket-tts/onnx/";
+const TTS_ORT_BASE = "/models/onnxruntime-web/1.20.0/";
 
 /**
  * Playback cushion before speech starts, in seconds of synthesized audio. The
@@ -532,6 +540,8 @@ export class VoiceEngine {
       voiceCloning: false,
       cache: true,
       maxThreads: Math.min(navigator.hardwareConcurrency || 4, 4),
+      modelBaseUrl: TTS_MODEL_BASE,
+      ortBaseUrl: TTS_ORT_BASE,
     });
 
     try {

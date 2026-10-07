@@ -8,17 +8,21 @@
  *    SharedArrayBuffer, which the threaded Moonshine WASM build requires.
  *    Technique based on coi-serviceworker by Guido Zuidhof and contributors (MIT).
  *
- * 2. Offline support. The app shell and same-origin assets are cached on first
- *    use, plus the third-party assets the local voice stack needs at runtime
- *    (ONNX Runtime from jsDelivr, Google Fonts). Model weights are cached by the
- *    libraries themselves (Moonshine / Pocket TTS / the embedding model use Cache Storage),
- *    so this worker deliberately does not duplicate those downloads.
+ * 2. Offline support. The app shell, the hashed Vite assets, the site's own
+ *    `/fonts/` files and every other same-origin path are cached on first use,
+ *    so this worker is the one cache for them. `/models/` is passed through:
+ *    the model bytes are served from this origin and kept by the libraries'
+ *    own Cache Storage (the embedding model, Pocket TTS and Moonshine each own
+ *    their copy), so a second copy here would double the storage. Moonshine's
+ *    STT model still comes from its own CDN and is cached by the Moonshine
+ *    library itself until that pending decision changes it, so no third-party
+ *    host is cached here anymore.
  *
  * Update VERSION when the caching strategy changes; stale caches are pruned on
  * activation. Hashed Vite assets are immutable and served cache-first, while
  * unhashed files use stale-while-revalidate so deploys propagate.
  */
-const VERSION = "1";
+const VERSION = "2";
 const SHELL_CACHE = `cv-shell-${VERSION}`;
 const ASSET_CACHE = `cv-assets-${VERSION}`;
 const VENDOR_CACHE = `cv-vendor-${VERSION}`;
@@ -26,11 +30,10 @@ const KNOWN_CACHES = new Set([SHELL_CACHE, ASSET_CACHE, VENDOR_CACHE]);
 
 const SHELL_URLS = ["/", "/index.html", "/favicon.svg", "/downloads/deniss-muhla-cv.pdf"];
 
-const VENDOR_HOSTS = new Set([
-  "cdn.jsdelivr.net",
-  "fonts.googleapis.com",
-  "fonts.gstatic.com",
-]);
+// Every third-party runtime asset is served from this origin now, so no host is
+// left for the worker to cache. The set and the branch below stay: the next
+// asset that has to come from a host is added here once, by name.
+const VENDOR_HOSTS = new Set();
 
 const ASSET_CACHE_LIMIT = 120;
 
@@ -79,6 +82,11 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
 
   if (url.origin === self.location.origin) {
+    // The `/models/` bytes are served by this origin and kept by the loader's
+    // own Cache Storage, so the worker passes them straight through instead of
+    // holding a second copy. The branch has to run before `respondWith`: a
+    // returned `handleSameOrigin` promise would still take the request.
+    if (url.pathname.startsWith("/models/")) return;
     event.respondWith(handleSameOrigin(request, url));
     return;
   }

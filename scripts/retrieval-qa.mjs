@@ -71,6 +71,7 @@ import { ADAPTER_CONTRACT } from "../scripts/cv-facts/embedding.mjs";
 import { selectAnswer, RELEVANCE_FLOOR, CONFIDENCE, CONFIDENCE_MARGIN } from "../src/chat/retrieval/selection.ts";
 import { EXPECTED_EMBEDDING } from "../src/chat/retrieval/index.ts";
 import { ORT_WASM_PATHS } from "../src/chat/retrieval/encoder/runtime-assets.ts";
+import { MODEL_ASSET_SETS } from "./model-assets.mjs";
 import { QaDeadlineError, qaLimits, withDeadline, withOwnedDeadline } from "./qa-deadlines.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -79,6 +80,11 @@ const OUT_DIR = process.env.RETRIEVAL_QA_OUT ?? "/home/den/.cache/cv-assistant/r
 const PROFILE_DIR = process.env.RETRIEVAL_QA_PROFILE ?? join(OUT_DIR, "browser-profile");
 const HEADLESS = process.env.QA_HEADLESS === "true";
 const CHROME_CHANNEL = process.env.CHROME_CHANNEL ?? "chrome";
+
+/** The self-host proof asks the browser to resolve no host but the site's own and the one exception. */
+const BLOCK_OFF_ORIGIN = process.env.QA_BLOCK_OFF_ORIGIN === "1";
+const OFF_ORIGIN_BLOCK_FLAG =
+  "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1, EXCLUDE download.moonshine.ai";
 
 /**
  * The frozen fixture and identity digests. A changed fixture or a moved admitted artifact
@@ -791,12 +797,25 @@ function networkReason(failureText) {
 }
 
 /**
- * The two locked same-origin runtime paths, taken from the project-owned asset contract.
+ * The model's own route and its six locked paths, taken from the manifest that pins its files.
+ */
+const MXBAI_SET = MODEL_ASSET_SETS.find((set) => set.id === "mxbai-embed-xsmall-v1");
+
+if (MXBAI_SET === undefined) throw new Error("mxbai-set-missing-from-manifest");
+
+const MXBAI_ROUTE = MXBAI_SET.route;
+const MODEL_PATHS = MXBAI_SET.files.map((file) => `${MXBAI_ROUTE}${file.name}`);
+
+/**
+ * The locked same-origin runtime paths: the two ONNX Runtime files and the six model files.
  *
  * Only these paths can carry an explanation in the offline phase, so what is exempt comes from
- * the runtime the project already pins rather than from an inventory written beside it.
+ * the routes the project already pins rather than from an inventory written beside it.
  */
-const LOCKED_RUNTIME_PATHS = new Set(Object.values(ORT_WASM_PATHS));
+const LOCKED_RUNTIME_PATHS = new Set([...Object.values(ORT_WASM_PATHS), ...MODEL_PATHS]);
+
+/** The replay's own scope: exactly the locked paths, nothing the project does not pin. */
+const REPLAY_PATHS = [...LOCKED_RUNTIME_PATHS];
 
 /** The failure classes that name an offline network cause, as opposed to an unknown message. */
 const KNOWN_NETWORK_CAUSES = new Set(["internet-disconnected", "network-failed"]);
@@ -838,8 +857,22 @@ function consoleFailure(message, origin) {
   return { source: "console", reason: text === null ? "unclassified" : networkReason(text), ...(path === null ? {} : { path }) };
 }
 
-/** The one classification a confirmed offline replay may give a failure it explains. */
+/** The classification a confirmed offline replay gives a path the worker itself caches and serves. */
 const OFFLINE_EXPECTED_REASON = "sw-revalidation-without-network";
+
+/**
+ * The classification for a `/models/` path, and why it is not the one above.
+ *
+ * The worker passes those paths through, so it holds no copy of them and never revalidates
+ * one: an offline failure there is the passthrough being offline, not a revalidation without a
+ * network. One distinct reason per path class keeps the replay truthful.
+ */
+const PASSTHROUGH_EXPECTED_REASON = "model-passthrough-not-sw-cached";
+
+/** The classification a locked path's own handling earns, read from the path alone. */
+function offlineReason(path) {
+  return path.startsWith(MXBAI_ROUTE) ? PASSTHROUGH_EXPECTED_REASON : OFFLINE_EXPECTED_REASON;
+}
 
 /** The classification a failure nothing in its phase explains carries. */
 const UNEXPLAINED = "unexplained";
@@ -851,8 +884,11 @@ const UNEXPLAINED = "unexplained";
  * nothing this project can read names a cause for it. A request failure of a locked runtime
  * path with a known network cause is the one failure a confirmed offline replay explains by
  * itself, because the run set that context offline and then asked the page to replay exactly
- * those two files. A console error is explained only by such a request failure of the same path
- * and the same cause, and one request failure explains one console error.
+ * those paths. A console error is explained only by such a request failure of the same path
+ * and the same cause, and one request failure explains one console error. What an explained
+ * entry is told follows its own path: a worker-served runtime file keeps
+ * {@link OFFLINE_EXPECTED_REASON}, a `/models/` passthrough keeps
+ * {@link PASSTHROUGH_EXPECTED_REASON}.
  *
  * Everything else stays blocking: an unknown message, a path that is not a locked one, a cause
  * a request failure does not share, and every HTTP status failure. An explained entry keeps its
@@ -877,7 +913,7 @@ export function classifyOfflinePhase(entries, context) {
         return {
           ...entry,
           disposition: "expected",
-          classification: OFFLINE_EXPECTED_REASON,
+          classification: offlineReason(entry.path),
           evidence: { source: "offline-replay", path: entry.path, reason: entry.reason },
         };
       }
@@ -893,7 +929,7 @@ export function classifyOfflinePhase(entries, context) {
           return {
             ...entry,
             disposition: "expected",
-            classification: OFFLINE_EXPECTED_REASON,
+            classification: offlineReason(entry.path),
             evidence: { source: "request", path: entry.path, reason: entry.reason },
           };
         }
@@ -1058,17 +1094,18 @@ function restorationProblem(replay) {
 }
 
 /**
- * The scoped offline replay of the two already-cached runtime files.
+ * The scoped offline replay of every locked runtime path.
  *
  * `setOffline(true)` is the browser's own switch and it is undone in `finally`, so a replay
- * that fails leaves the rest of the run on a networked context. The page fetches the two
- * runtime URLs as plain same-origin requests, through the worker that holds them, and nothing
- * here names a cache mode or asks a cache to be bypassed.
- *
+ * that fails leaves the rest of the run on a networked context. The page fetches each locked
+ * URL as a plain same-origin request, and nothing here names a cache mode or asks a cache to
+ * be bypassed. The two classes of path answer differently on purpose: the worker serves the
+ * ONNX Runtime files from its own cache, and it passes `/models/` straight through, so those
+ * fail with the network and are classified by their own reason instead of by the worker's.
  * The failures this phase produced are classified, not excused: {@link classifyOfflinePhase}
- * explains a request failure of a locked runtime path with a known network cause, and a console
- * error that a request failure of the same path and cause explains, while every other failure
- * keeps its ordinary accounting.
+ * explains a request failure of a locked runtime path with a known network cause, and a
+ * console error that a request failure of the same path and cause explains, while every other
+ * failure keeps its ordinary accounting.
  *
  * @returns `result` is the page's own record, `failure` the thrown value of the replay itself
  *   as it was thrown, `window` the phase's own classified accounting, and a restoration that
@@ -1092,7 +1129,7 @@ async function replayRuntimeOffline(context, page, limits, phase) {
     result = await withDeadline(
       "offline-replay",
       limits.loadMs,
-      page.evaluate((paths) => window.retrievalQa.replayRuntime(paths), Object.values(ORT_WASM_PATHS)),
+      page.evaluate((paths) => window.retrievalQa.replayRuntime(paths), REPLAY_PATHS),
     );
   } catch (error) {
     // The thrown value is kept as it was thrown. What a report says about it is decided at
@@ -1356,6 +1393,7 @@ async function main(cleanup) {
           channel: CHROME_CHANNEL,
           headless: HEADLESS,
           viewport: { width: 1280, height: 900 },
+          ...(BLOCK_OFF_ORIGIN ? { args: [OFF_ORIGIN_BLOCK_FLAG] } : {}),
         }),
       (context) => context.close(),
       reportLateCleanup,
@@ -1628,8 +1666,11 @@ async function main(cleanup) {
 
     const byId = new Map([sample, ...reports].map((report) => [report.id, report]));
 
-    // The model bytes this browser consumed, against the generator's admitted digests.
-    const remoteBase = `${opened.remoteHost ?? ""}${(opened.remotePathTemplate ?? "").replace("{model}", EXPECTED_EMBEDDING.model)}`;
+    // The model bytes this browser consumed, against the generator's admitted digests. The
+    // URLs are the ones the page really asked for: the origin the worker reports serving them
+    // from, joined to the route the manifest pins, and no vendor address the browser never
+    // reaches.
+    const remoteBase = `${opened.remoteHost ?? ""}${MXBAI_ROUTE}`;
     const admittedUrls = frozen.admitted.assets.map((asset) => ({
       name: asset.file,
       url: `${remoteBase}${asset.file}`,
@@ -1905,7 +1946,11 @@ async function main(cleanup) {
       requests: {
         total: requested.length,
         runtimeAssets: requested.filter((url) => url.includes("/ort/")),
-        modelRequests: [...new Set(requested.filter((url) => url.includes("huggingface.co") || url.includes("hf.co")))].sort(),
+        modelRequests: [...new Set(requested.filter((url) => url.includes(MXBAI_ROUTE)))].sort(),
+        // Everything the page asked for outside its own origin, kept as origins and paths so
+        // a self-host proof can show what still leaves the site, and by which exception.
+        offOrigin: [...new Set(requested.filter((url) => !url.startsWith(server.origin)))].sort(),
+        offOriginBlocked: BLOCK_OFF_ORIGIN,
         asyncifyRequested: requested.some((url) => url.includes("asyncify")),
       },
       failures: {
@@ -1954,6 +1999,8 @@ async function main(cleanup) {
         controller: controllerSummary(controller),
         lexical,
         modelRequestPaths: report.requests.modelRequests.length,
+        offOriginRequestPaths: report.requests.offOrigin,
+        offOriginBlocked: report.requests.offOriginBlocked,
         notOk: report.notOk,
       }),
     );

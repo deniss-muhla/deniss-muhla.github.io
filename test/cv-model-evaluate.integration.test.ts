@@ -21,7 +21,7 @@ import {
   SmokeFailure,
   type SmokeReport,
 } from "../scripts/cv-model-evaluate.ts";
-import { EXPECTED_EMBEDDING } from "../src/chat/retrieval/index.ts";
+import { EXPECTED_EMBEDDING, MODEL_PATH_PREFIX } from "../src/chat/retrieval/index.ts";
 import { ORT_ROUTE, ORT_RUNTIME_VERSION } from "../src/chat/retrieval/encoder/runtime-assets.ts";
 
 const failureMarker = "private failure detail";
@@ -74,12 +74,13 @@ function mockEngine(scenario: Scenario): string {
 }
 
 function mockRuntime(scenario: Scenario): Plugin {
-  const pinnedPrefix = `/${EXPECTED_EMBEDDING.model}/resolve/${EXPECTED_EMBEDDING.revision}/`;
-  // The three cached kinds the report requires, at the pinned revision the page filters on.
+  const pinnedPrefix = MODEL_PATH_PREFIX;
+  // The three cached kinds the report requires, at the site-absolute model route the loader
+  // now reads them from, the same shape as the `/ort/` paths the page fetches below.
   const cachedRequests = [
-    `https://huggingface.co${pinnedPrefix}onnx/model_quantized.onnx`,
-    `https://huggingface.co${pinnedPrefix}tokenizer.json`,
-    `https://huggingface.co${pinnedPrefix}config.json`,
+    `${pinnedPrefix}onnx/model_quantized.onnx`,
+    `${pinnedPrefix}tokenizer.json`,
+    `${pinnedPrefix}config.json`,
   ];
 
   return {
@@ -236,7 +237,7 @@ async function verifyRun(scenario: Scenario) {
       assert.equal(report.runtime.ortRuntimeVersion, ORT_RUNTIME_VERSION);
       assert.equal(report.cacheEntriesBeforeLoad, 3);
       assert.equal(report.index.cards > 0, true);
-      assert.equal(report.assets.filter((asset) => asset.url.startsWith("https://huggingface.co/")).length, 3);
+      assert.equal(report.assets.filter((asset) => asset.url.startsWith(MODEL_PATH_PREFIX)).length, 3);
       assert.equal(report.assets.filter((asset) => asset.url.startsWith(ORT_ROUTE)).length, 2);
       assert.ok(!output.includes(failureMarker) && !output.includes(answerMarker));
 

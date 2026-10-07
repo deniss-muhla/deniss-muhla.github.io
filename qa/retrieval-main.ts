@@ -313,15 +313,16 @@ const api = {
   },
 
   /**
-   * Replays the two runtime files while the browser context is offline.
+   * Replays every locked runtime path while the browser context is offline.
    *
    * The requests are plain same-origin fetches, so they travel through the same service
    * worker as every other request; nothing here names a cache mode or a store. A fetch that
    * cannot be answered is reported per file with its error name, because a replay that only
    * reports successes would be indistinguishable from one that never ran.
    *
-   * This proves two cached runtime files are served offline. It proves nothing about the model
-   * files, the chat path or speech, and it writes nothing.
+   * The worker serves the ONNX Runtime files from its own cache and passes `/models/` through,
+   * so the two classes of path are expected to answer differently offline. This writes
+   * nothing, and it says nothing about the chat path or speech.
    */
   async replayRuntime(paths: readonly string[]) {
     const replayed: ReplayedRuntimeAsset[] = [];

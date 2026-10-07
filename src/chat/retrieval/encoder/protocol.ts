@@ -46,7 +46,7 @@ export type EncoderResponse =
       readonly type: "ready";
       readonly dimensions: number;
       readonly loadMs: number;
-      /** The library version that answered, the pinned remote it was told to use, and the files it read. */
+      /** The library version that answered, the origin that served the bytes, the revision-literal path template, and the files it read. */
       readonly runtimeVersion: string;
       readonly remoteHost: string;
       readonly remotePathTemplate: string;

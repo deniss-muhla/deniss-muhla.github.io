@@ -37,6 +37,24 @@ export const EXPECTED_EMBEDDING: Readonly<EmbeddingIdentity> = Object.freeze({
   inputVersion: "retrieval-text-v1",
 });
 
+/**
+ * The site-absolute base the embedding model is served from.
+ *
+ * `scripts/model-assets.mjs` pins the model's own route as `/models/<model>/<file>`; this is
+ * the base half of it, used as the loader's local model path and to recognize the cache keys
+ * the load produces. The site is served from the domain root, so the path is site-absolute.
+ */
+export const MODEL_ROUTE = "/models/";
+
+/**
+ * The site-absolute prefix every file of the pinned embedding model is served and cached
+ * under: the route plus the pinned model id, which is the path the loader builds for each
+ * file from its local model path. The smoke's asset filter, the cache-key scan and the
+ * mocked cache of its integration test read the prefix from here, so one route change
+ * moves all three.
+ */
+export const MODEL_PATH_PREFIX = `${MODEL_ROUTE}${EXPECTED_EMBEDDING.model}/`;
+
 export interface SourceRange {
   startLine: number;
   endLine: number;
