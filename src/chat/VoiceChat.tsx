@@ -1,14 +1,23 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import { GREETING, INTRO } from "./cv-context";
-import { trace, voiceEngine, type ModelProgress, type ModelStates } from "./engine";
+import {
+  PROGRESS_WEIGHTS,
+  trace,
+  voiceEngine,
+  type ClarificationChoice,
+  type ModelProgress,
+  type ModelStates,
+} from "./engine";
 import { mergeTranscript } from "./transcript";
+import {
+  createTurnFlow,
+  type Message,
+  type MessageRole,
+  type TurnFlow,
+  type TurnState,
+} from "./turn";
 import styles from "./VoiceChat.module.css";
-
-type MessageRole = "user" | "assistant" | "status";
-type Message = { id: number; role: MessageRole; text: string; pending?: boolean };
-
-type TurnState = "idle" | "listening" | "thinking" | "speaking" | "error";
 
 const PAUSE_COMMIT_MS = 1100;
 
@@ -18,17 +27,24 @@ function formatPercent(value: number): string {
 
 export function VoiceChat() {
   const [open, setOpen] = useState(false);
-  const [progress, setProgress] = useState<ModelProgress>({ stt: 0, tts: 0, llm: 0 });
-  const [states, setStates] = useState<ModelStates>({ stt: "idle", tts: "idle", llm: "idle" });
+  const [progress, setProgress] = useState<ModelProgress>({ stt: 0, tts: 0, encoder: 0 });
+  const [states, setStates] = useState<ModelStates>({
+    stt: "idle",
+    tts: "idle",
+    encoder: "idle",
+  });
   const [turn, setTurn] = useState<TurnState>("idle");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [blink, setBlink] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [asked, setAsked] = useState(false);
+  /** The clarification choices currently offered, rendered from the engine's pendingChoices(). */
+  const [choices, setChoices] = useState<readonly ClarificationChoice[] | null>(null);
+  /** The last question that produced no answer, offered back through the retry control. */
+  const [retryOf, setRetryOf] = useState<string | null>(null);
 
   const openRef = useRef(open);
-  const greetingSentRef = useRef(false);
   const revisionRef = useRef(0);
   const finalizedTurnRef = useRef("");
   const interimTurnRef = useRef("");
@@ -42,14 +58,17 @@ export function VoiceChat() {
   openRef.current = open;
 
   const overall = useMemo(
-    () => (Object.keys(progress) as Array<keyof ModelProgress>).reduce(
-      (sum, key, index) => sum + progress[key] * [0.18, 0.27, 0.55][index],
+    () => (Object.keys(PROGRESS_WEIGHTS) as Array<keyof ModelProgress>).reduce(
+      (sum, key) => sum + progress[key] * PROGRESS_WEIGHTS[key],
       0,
     ),
     [progress],
   );
-  const loading = states.stt === "loading" || states.tts === "loading" || states.llm === "loading";
-  const ready = states.stt === "ready" && states.tts === "ready" && states.llm === "ready";
+  const loading =
+    states.stt === "loading" ||
+    states.tts === "loading" ||
+    states.encoder === "loading";
+  const ready = states.stt === "ready" && states.tts === "ready";
 
   const appendMessage = useCallback((role: MessageRole, text: string, pending = false) => {
     const id = nextIdRef.current++;
@@ -93,68 +112,71 @@ export function VoiceChat() {
     }
   }, []);
 
-  const stopAssistantWork = useCallback(() => {
-    revisionRef.current += 1;
-    voiceEngine.interrupt();
-    voiceEngine.stopAudio();
-    if (activeAssistantMessageRef.current !== null) {
-      const id = activeAssistantMessageRef.current;
-      activeAssistantMessageRef.current = null;
-      setMessages((current) =>
-        current.flatMap((message) => {
-          if (message.id !== id) return [message];
-          const text = message.text.trim();
-          return text ? [{ ...message, pending: false }] : [];
-        }),
-      );
-    }
-  }, []);
+  const flowRef = useRef<TurnFlow | null>(null);
+  flowRef.current ??= createTurnFlow({
+    engine: voiceEngine,
+    refs: {
+      revision: revisionRef,
+      activeUser: activeUserMessageRef,
+      activeAssistant: activeAssistantMessageRef,
+    },
+    append: appendMessage,
+    update: updateMessage,
+    remove: removeMessage,
+    setMessages,
+    setTurn,
+    setChoices,
+    setRetryOf,
+    setNotice,
+    cancelPause: cancelPauseTimer,
+    resetTurnText,
+  });
+  const flow = flowRef.current;
+  const stopAssistantWork = flow.supersedeAnswer;
 
-  const respond = useCallback(
-    async (question: string) => {
+  /** Selects an offered clarification entry directly: no second inference, then the same
+   * spoken output any other answer would get. */
+  const handleChoice = useCallback(
+    (cardId: string) => {
+      setChoices(null);
+      setRetryOf(null);
+      const picked = voiceEngine.chooseClarification(cardId);
+      if (!picked || picked.kind !== "answer") {
+        appendMessage("status", "That choice is no longer available. Please ask again.");
+        setTurn("listening");
+        return;
+      }
+
       const revision = ++revisionRef.current;
       const isCurrent = () => revision === revisionRef.current;
-      setTurn("thinking");
+      appendMessage("assistant", picked.answer, false);
 
-      const assistantId = appendMessage("assistant", "", true);
-      activeAssistantMessageRef.current = assistantId;
-
-      try {
-        await voiceEngine.ensureLlm();
-        if (!isCurrent()) return;
-
-        const answer = await voiceEngine.ask(question, {
-          speak: true,
+      setTurn("speaking");
+      void voiceEngine
+        .speak(picked.answer, {
           isCurrent,
-          onDelta: (text) => {
-            if (!isCurrent()) return;
-            updateMessage(assistantId, { text, pending: true });
-          },
           onSpeakingChange: (speaking) => {
-            if (!isCurrent()) return;
-            setTurn(speaking ? "speaking" : "thinking");
+            if (isCurrent()) setTurn(speaking ? "speaking" : "listening");
           },
+        })
+        .then(() => {
+          if (isCurrent()) setTurn("listening");
+        })
+        .catch((error: unknown) => {
+          if (!isCurrent()) return;
+          const message = error instanceof Error ? error.message : String(error);
+          appendMessage("status", `Speech output failed: ${message}`);
+          setTurn("listening");
         });
-
-        if (!isCurrent()) return;
-        activeAssistantMessageRef.current = null;
-        updateMessage(assistantId, {
-          text: answer || "I could not find an answer in the CV.",
-          pending: false,
-        });
-        setTurn("listening");
-      } catch (error) {
-        if (!isCurrent()) return;
-        activeAssistantMessageRef.current = null;
-        removeMessage(assistantId);
-        const message = error instanceof Error ? error.message : String(error);
-        setNotice(message);
-        setTurn("error");
-        appendMessage("status", message);
-      }
     },
-    [appendMessage, removeMessage, updateMessage],
+    [appendMessage],
   );
+
+  const handleRetry = useCallback(() => {
+    if (retryOf === null) return;
+    // The same supersede as a typed send, then re-ask through the flow.
+    flow.retry(retryOf);
+  }, [flow, retryOf]);
 
   const commitPendingTurn = useCallback(() => {
     pauseTimerRef.current = null;
@@ -173,8 +195,8 @@ export function VoiceChat() {
       updateMessage(userMessageId, { text: question, pending: false });
     }
 
-    void respond(question);
-  }, [currentTurnText, resetTurnText, respond, updateMessage]);
+    void flow.respond(question);
+  }, [currentTurnText, flow, resetTurnText, updateMessage]);
 
   const scheduleCommit = useCallback(() => {
     cancelPauseTimer();
@@ -189,18 +211,9 @@ export function VoiceChat() {
 
       setInput("");
       setAsked(true);
-      revisionRef.current += 1;
-      voiceEngine.interrupt();
-      voiceEngine.stopAudio();
-      cancelPauseTimer();
-      resetTurnText();
-      activeUserMessageRef.current = null;
-      activeAssistantMessageRef.current = null;
-
-      appendMessage("user", question);
-      void respond(question);
+      flow.send(question);
     },
-    [appendMessage, cancelPauseTimer, input, resetTurnText, respond],
+    [flow, input],
   );
 
   // Wire speech recognition callbacks once; they read refs so they stay stable.
@@ -243,12 +256,17 @@ export function VoiceChat() {
       setProgress(nextProgress);
       setStates(nextStates);
     });
+    // A storage eviction surfaces during the TTS load; the chat reports it as a
+    // status line, so the reason the model is loading again is visible when the
+    // panel opens.
+    voiceEngine.setStorageNoticeHandler((text) => appendMessage("status", text));
 
     const startPrefetch = async () => {
       const capabilities = await voiceEngine.detectOnce();
-      // Respect metered connections: load on first interaction instead.
+      // Data saving: no model request before the explicit open. The engine enforces the
+      // same gate; the chat only adds the explanation.
       if (capabilities.saveData) {
-        setNotice("Models are not preloaded on metered connections. They will load when you open the chat.");
+        setNotice("Data saving is on: models are not preloaded. They will load when you open the chat.");
         return;
       }
       void voiceEngine.prefetch();
@@ -264,13 +282,14 @@ export function VoiceChat() {
     }, 1200);
 
     return () => {
+      voiceEngine.setStorageNoticeHandler(null);
       window.clearTimeout(timeoutId);
       if (idleId !== null && typeof window.cancelIdleCallback === "function") {
         window.cancelIdleCallback(idleId);
       }
       unsubscribe();
     };
-  }, []);
+  }, [appendMessage]);
 
   // When everything is ready while the panel is closed, blink the ring once.
   useEffect(() => {
@@ -280,22 +299,6 @@ export function VoiceChat() {
     if (blinkTimerRef.current !== null) window.clearTimeout(blinkTimerRef.current);
     blinkTimerRef.current = window.setTimeout(() => setBlink(false), 1800);
   }, [ready, open]);
-
-  const greet = useCallback(async () => {
-    if (greetingSentRef.current) return;
-    greetingSentRef.current = true;
-    appendMessage("assistant", GREETING);
-    try {
-      await voiceEngine.speak(GREETING, {
-        isCurrent: () => true,
-        onSpeakingChange: (speaking) => setTurn(speaking ? "speaking" : "listening"),
-      });
-      setTurn("listening");
-    } catch {
-      // Speech output is optional; the text greeting is still shown.
-      setTurn("listening");
-    }
-  }, [appendMessage]);
 
   const startListening = useCallback(async () => {
     setTurn("listening");
@@ -328,7 +331,7 @@ export function VoiceChat() {
       return;
     }
 
-    void greet();
+    void flow.greet(GREETING);
     if (turn === "idle") void startListening();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, ready]);
@@ -339,6 +342,9 @@ export function VoiceChat() {
       if (next) {
         setNotice(null);
         void voiceEngine.resumeAudio();
+        // The explicit open starts the on-demand loads; under data saving this is where
+        // every model request begins, otherwise it joins the background prefetch.
+        void voiceEngine.startOnDemand();
       } else {
         cancelPauseTimer();
         resetTurnText();
@@ -371,15 +377,16 @@ export function VoiceChat() {
   const showRing = loading || (overall > 0 && overall < 1);
 
   const statusText = (() => {
-    if (states.llm === "error" && states.stt === "error" && states.tts === "error") {
+    if (states.stt === "error" && states.tts === "error") {
       return "Local models are unavailable in this browser.";
     }
     if (loading) {
       if (states.stt === "loading") return `Loading speech recognition · ${formatPercent(progress.stt)}`;
       if (states.tts === "loading") return `Loading speech output · ${formatPercent(progress.tts)}`;
-      return `Loading answer model · ${formatPercent(progress.llm)}`;
+      if (states.encoder === "loading") return `Loading matching model · ${formatPercent(progress.encoder)}`;
+      return `Loading local models · ${formatPercent(overall)}`;
     }
-    if (!ready) return "Voice assistant unavailable.";
+    if (!ready) return notice ?? "Voice assistant unavailable.";
     if (turn === "listening") return "Listening — speak or type.";
     if (turn === "thinking") return "Thinking…";
     if (turn === "speaking") return "Speaking…";
@@ -426,15 +433,54 @@ export function VoiceChat() {
             </p>
           ) : null}
           {messages.map((message) => (
-            <p
-              key={message.id}
-              className={`${styles.message} ${styles[message.role]}`}
-              data-pending={message.pending ? "" : undefined}
-            >
-              {message.text || "…"}
-            </p>
+            <Fragment key={message.id}>
+              <p
+                className={`${styles.message} ${message.role === "status" ? styles.statusMessage : styles[message.role]}`}
+                data-pending={message.pending ? "" : undefined}
+              >
+                {message.text || "…"}
+              </p>
+              {/* The cue or limited-matching label sits outside the prepared answer. */}
+              {message.note ? (
+                <p className={styles.note} data-testid="voice-note">
+                  {message.note}
+                </p>
+              ) : null}
+            </Fragment>
           ))}
         </div>
+
+        {choices && choices.length > 0 ? (
+          <div
+            className={styles.choices}
+            role="group"
+            aria-label="Clarification choices"
+            data-testid="voice-choices"
+          >
+            {choices.map((choice) => (
+              <button
+                key={choice.cardId}
+                type="button"
+                className={styles.choice}
+                data-testid="voice-choice"
+                onClick={() => handleChoice(choice.cardId)}
+              >
+                {choice.topic}
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {retryOf !== null ? (
+          <button
+            type="button"
+            className={styles.retry}
+            data-testid="voice-retry"
+            onClick={handleRetry}
+          >
+            Try again
+          </button>
+        ) : null}
 
         <form className={styles.composer} onSubmit={handleSend}>
           <input

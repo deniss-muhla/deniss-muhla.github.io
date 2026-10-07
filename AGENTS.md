@@ -20,7 +20,7 @@ from and the on-device voice assistant embedded in the page.
   - the repository is **public**, so nothing private may enter it or its history;
   - GitHub Pages serves static files and **cannot set HTTP headers**;
   - speech recognition needs `SharedArrayBuffer`, which needs cross-origin isolation;
-  - the answer model needs WebGPU, which may be absent;
+  - semantic matching needs an embedding model that may fail to load;
   - visitors may be on mobile networks and metered connections.
 - Treat explicit constraints as design tools. Work toward the boundaries they define rather
   than bypassing them with unnecessary complexity.
@@ -31,9 +31,10 @@ from and the on-device voice assistant embedded in the page.
 
 - Keep modules focused and connect them through explicit contracts rather than each other's
   internal details.
-- Keep vendor details behind one project-owned boundary. The voice engine is that boundary for
-  Moonshine, WebLLM and Pocket TTS: application and UI code must not import those packages
-  directly, and swapping a model must not require touching the chat UI.
+- Keep vendor details behind project-owned boundaries. The voice engine is that boundary for
+  Moonshine and Pocket TTS; the retrieval encoder is that boundary for
+  `@huggingface/transformers` and `onnxruntime-web`: application and UI code must not import
+  those packages directly, and swapping a model must not require touching the chat UI.
 - Keep high-level modules dependent on project-owned types such as the engine's progress and
   state values, not on vendor objects, configuration shapes, or lifecycles.
 - A reader should understand a module's scope from its directory, file name, exports and nearby
@@ -52,6 +53,10 @@ from and the on-device voice assistant embedded in the page.
   either directly published professional information or a clearly attributed source.
 - Keep the current CV (`resources/cv/source/cv.md`) and its derived PDF as the single source
   for CV content; do not duplicate CV text into components or notes.
+- One derived file is allowed next to it: `resources/cv/facts.json`, the reviewed answer index
+  prepared for assistant retrieval. It holds concise prepared answers with source line references
+  and is not a copy of the full CV, the canonical CV stays authoritative, and a CV change means
+  regenerating the whole index and source-reviewing the regenerated index rather than editing cards.
 - Prefer updating an existing document over adding a parallel one. Do not keep a stale copy of
   a fact in two files.
 - Put explanations next to the implementation they clarify. Prefer precise TypeScript names and
@@ -89,10 +94,7 @@ from and the on-device voice assistant embedded in the page.
   a real transcription from the fake microphone. State that check in the change that touches
   the runtime.
 - For a bug fix, the regression check must fail before the fix and pass after it.
-- Keep prompt fixtures frozen so instruction changes are visible in tests. One reviewed-public,
-  historical, non-authoritative full-CV snapshot is allowed only for the default prompt test;
-  check its raw-byte fingerprint against the current canonical CV and review the source, snapshot
-  and frozen prompt expectations together when it changes. Do not copy the full CV into other tests.
+- Do not copy the full CV into other tests.
 - Do not add one-off checks that consume resources afterward, unless they protect an enduring
   contract.
 
@@ -112,7 +114,7 @@ from and the on-device voice assistant embedded in the page.
 - Do not split purely by line count or add indirection without a clear responsibility boundary.
 - Organize the source tree by product functionality and each feature's logical role, not by
   generic technical type. `src/chat`, `src/offline` and `src/page` are the intended example.
-- The voice engine currently holds speech recognition, speech output and the answer model in
+- The voice engine currently holds speech recognition, speech output and the retrieval wiring in
   one module. Splitting those three behind the existing project-owned interface is welcome once
   a change touches them, provided the chat UI contract stays unchanged.
 
@@ -121,7 +123,7 @@ from and the on-device voice assistant embedded in the page.
 - Prefer code that is straightforward to use, maintain and evolve, with clear boundaries that
   keep the cost and scope of change low.
 - Prefer designs where new capabilities can be added without changing existing ones, such as
-  substituting the answer model or the speech voice behind the engine boundary.
+  substituting the embedding model or the speech voice behind the engine boundary.
 - Avoid premature abstraction, but favor extensibility when it comes naturally.
 - Add abstraction or flexibility for a concrete need, not for speculative future extension.
 - Separate required fixes from optional optimizations. Measure the corrected baseline before
@@ -144,7 +146,7 @@ from and the on-device voice assistant embedded in the page.
 - Describe user-facing actions in terms of the user's goal rather than internal paths or
   implementation mechanics.
 - When an action has a prerequisite, provide a clear path to satisfy it instead of a passive or
-  dead-end state. When live voice or the answer model is unavailable, the chat must still accept
+  dead-end state. When live voice or semantic matching is unavailable, the chat must still accept
   typed questions and explain what is missing.
 - Keep equivalent workflows on shared behavior. Typed and spoken questions must produce the same
   answers, the same cleanup and the same spoken output.
@@ -294,6 +296,9 @@ from and the on-device voice assistant embedded in the page.
 
 - Large binaries and generated trees stay out of Git: model weights, the vendored Moonshine
   runtime, the generated CV PDF, browser profiles and build output.
+- Keep the `cv:facts` intermediates out of Git too: source analysis, candidate and snapshot
+  artifacts and model caches live in a workspace outside the repository. `resources/cv/facts.json`
+  is the single generated file kept in, for assistant retrieval.
 - Keep the generator and its inputs in the repository, and document the exact command that
   recreates the artifact.
 - Store test media such as the fake microphone WAV outside the repository, and document how to

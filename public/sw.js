@@ -11,7 +11,7 @@
  * 2. Offline support. The app shell and same-origin assets are cached on first
  *    use, plus the third-party assets the local voice stack needs at runtime
  *    (ONNX Runtime from jsDelivr, Google Fonts). Model weights are cached by the
- *    libraries themselves (Moonshine / Pocket TTS / WebLLM use Cache Storage),
+ *    libraries themselves (Moonshine / Pocket TTS / the embedding model use Cache Storage),
  *    so this worker deliberately does not duplicate those downloads.
  *
  * Update VERSION when the caching strategy changes; stale caches are pruned on
