@@ -81,10 +81,10 @@ const PROFILE_DIR = process.env.RETRIEVAL_QA_PROFILE ?? join(OUT_DIR, "browser-p
 const HEADLESS = process.env.QA_HEADLESS === "true";
 const CHROME_CHANNEL = process.env.CHROME_CHANNEL ?? "chrome";
 
-/** The self-host proof asks the browser to resolve no host but the site's own and the one exception. */
+/** The self-host proof asks the browser to resolve no host but the site's own. */
 const BLOCK_OFF_ORIGIN = process.env.QA_BLOCK_OFF_ORIGIN === "1";
 const OFF_ORIGIN_BLOCK_FLAG =
-  "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1, EXCLUDE download.moonshine.ai";
+  "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1";
 
 /**
  * The frozen fixture and identity digests. A changed fixture or a moved admitted artifact

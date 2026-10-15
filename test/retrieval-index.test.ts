@@ -50,6 +50,40 @@ test("a valid artifact is accepted unchanged", () => {
   assert.equal(card?.vector.length, EXPECTED_EMBEDDING.dimensions);
 });
 
+test("a reviewed optional group is parsed and an older ungrouped card stays unchanged", () => {
+  const artifact = syntheticArtifactWith((value) => {
+    const cards = value.cards as Record<string, unknown>[];
+    cards[0].variantGroup = "reviewed-variants";
+    cards[1].variantGroup = "reviewed-variants";
+  }) as { cards: Record<string, unknown>[] };
+  const parsed = readReviewedIndex(artifact);
+  const older = readReviewedIndex(syntheticArtifact());
+
+  assert.equal(parsed.cards[0].variantGroup, "reviewed-variants");
+  assert.equal(Object.hasOwn(parsed.cards[2], "variantGroup"), false);
+  assert.equal(Object.hasOwn(older.cards[0], "variantGroup"), false);
+});
+
+test("malformed optional group fields and singleton groups are refused", () => {
+  const malformed = syntheticArtifactWith((value) => {
+    (value.cards as Record<string, unknown>[])[0].variantGroup = null;
+  });
+  const unsafe = syntheticArtifactWith((value) => {
+    (value.cards as Record<string, unknown>[])[0].variantGroup = "Not safe";
+  });
+  const unknown = syntheticArtifactWith((value) => {
+    (value.cards as Record<string, unknown>[])[0].unreviewed = true;
+  });
+  const singleton = syntheticArtifactWith((value) => {
+    (value.cards as Record<string, unknown>[])[0].variantGroup = "reviewed-variants";
+  });
+
+  assert.equal(rejectionReason(malformed), "card/variant-group");
+  assert.equal(rejectionReason(unsafe), "card/variant-group");
+  assert.equal(rejectionReason(unknown), "card/keys");
+  assert.equal(rejectionReason(singleton), "index/variant-group-singleton");
+});
+
 test("cards keep the artifact order and their stored vectors", () => {
   const artifact = syntheticArtifact() as { cards: { id: string; vector: number[] }[] };
   const index = readReviewedIndex(artifact);

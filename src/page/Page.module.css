@@ -61,7 +61,7 @@
 }
 
 /* ── Scroll-driven theme keyframes ── */
-/* Transition completes by ~20% scroll so CV document appears in light mode */
+/* Both clocks use the same 9–15% theme and spread transition. */
 
 @keyframes theme-shift {
   0%,
@@ -95,16 +95,38 @@
 /* ── Root ── */
 
 .root {
+  --bg: #24273a;
+  --bg-panel: #1e2030;
+  --ink: #cad3f5;
+  --ink-sub: #a5adcb;
+  --ink-faint: #6e738d;
+  --line: #363a4f;
+  --accent: #c6a0f6;
+  --accent2: #b7bdf8;
+  --spread: 0;
   --page-progress: 0;
-  animation: theme-shift linear both;
-  animation-timeline: scroll(root block);
-  animation-duration: 1ms;
-  animation-timing-function: ease-in-out;
 
   background: var(--bg);
   color: var(--ink);
   font-family: "Playfair Display", Georgia, serif;
   min-height: 100vh;
+}
+
+/* A paused negative-delay clock also works without scroll timelines. Keep its
+   shorthand separate from the native timeline rule: merging them emits the new
+   animation shorthand syntax that some timeline-capable browsers still reject. */
+.root {
+  animation: theme-shift 1s ease-in-out both paused;
+  animation-delay: calc(var(--page-progress) * -1s);
+}
+
+@supports (animation-timeline: scroll(root block)) {
+  .root {
+    animation-duration: auto;
+    animation-delay: 0s;
+    animation-play-state: running;
+    animation-timeline: scroll(root block);
+  }
 }
 
 /* ── Hero Section ── */
@@ -238,15 +260,18 @@
 .arrowUp {
   position: fixed;
   left: 50%;
-  width: 42px;
-  height: 42px;
-  transform: translateX(-50%);
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid #24273a;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--ink) 60%, var(--bg) 15%);
-  box-shadow: 0 12px 34px color-mix(in srgb, var(--bg-panel) 34%, transparent);
-  pointer-events: none;
+  transform: translateX(-50%);
+  background-color: #fff;
+  box-shadow: 0 8px 22px rgb(0 0 0 / 28%);
   z-index: 90;
-  opacity: 0.5;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .arrowDown {
@@ -255,19 +280,14 @@
 
 .arrowUp {
   top: 20px;
-  opacity: 0.5;
 }
 
 .arrowDown::before,
 .arrowUp::before {
   content: "";
   position: absolute;
-  inset: 0;
-  background: var(--bg);
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: 54% 54%;
-  animation: arrow-pulse 1.8s ease-in-out infinite;
+  inset: 6px;
+  background-color: #24273a;
 }
 
 .arrowDown::before {
@@ -284,28 +304,54 @@
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M22 44L50 16L78 44' fill='none' stroke='black' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M22 70L50 42L78 70' fill='none' stroke='black' stroke-width='10' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
-@keyframes arrow-pulse {
-  0%,
-  100% {
-    filter: opacity(1);
-  }
-
-  50% {
-    filter: opacity(0.3);
-  }
-}
-
-.root[data-at-top] .arrowUp {
-  opacity: 0;
-}
-
+.root[data-at-top] .arrowUp,
 .root[data-at-bottom] .arrowDown {
   opacity: 0;
 }
 
+.arrowDown:disabled,
+.arrowUp:disabled {
+  cursor: default;
+}
+
+.arrowDown:hover:not(:disabled),
+.arrowUp:hover:not(:disabled) {
+  transform: translateX(-50%) scale(1.04);
+}
+
+.arrowDown:focus-visible,
+.arrowUp:focus-visible {
+  outline: 2px solid #24273a;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px #fff;
+}
+
+.arrowDown:active:not(:disabled),
+.arrowUp:active:not(:disabled) {
+  transform: translateX(-50%) scale(0.94);
+}
+
 .arrowDown,
 .arrowUp {
-  transition: opacity 180ms ease;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .root {
+    --spread: 0 !important;
+  }
+
+  .arrowDown,
+  .arrowUp {
+    transition: none;
+  }
+
+  .arrowDown:hover:not(:disabled),
+  .arrowUp:hover:not(:disabled),
+  .arrowDown:active:not(:disabled),
+  .arrowUp:active:not(:disabled) {
+    transform: translateX(-50%);
+  }
 }
 
 /* ── CV Section ── */
@@ -391,6 +437,13 @@
 
 .markdown :global(*) {
   max-width: 100%;
+}
+
+.markdown :global(h1),
+.markdown :global(h2),
+.markdown :global(h3) {
+  /* Keep the sticky CV header from covering a heading scrolled into view. */
+  scroll-margin-top: 120px;
 }
 
 .markdown :global(h1) {
@@ -529,6 +582,8 @@
 
 @media print {
   .root {
+    animation: none;
+    --spread: 0;
     --bg: white;
     --ink: #4c4f69;
   }
@@ -614,16 +669,9 @@
     padding: 14px 18px;
   }
 
-  .arrowDown,
-  .arrowUp {
-    width: 42px;
-    height: 42px;
-  }
-
   .arrowUp {
     top: 14px;
   }
-
 
   .document {
     padding: 40px 28px 56px;
@@ -660,16 +708,6 @@
   .cvBackLink,
   .cvDownload {
     font-size: 0.66rem;
-  }
-
-  .arrowDown,
-  .arrowUp {
-    width: 36px;
-    height: 36px;
-  }
-
-  .arrowUp {
-    top: 14px;
   }
 
   .avatarDoc {

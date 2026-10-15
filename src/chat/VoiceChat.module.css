@@ -1,4 +1,9 @@
 .widget {
+  /* Fixed readable inverse fallback for engines without native color contrast. */
+  --chat-surface: #cad3f5;
+  --chat-text: #24273a;
+  --chat-outer-focus: #cad3f5;
+  --chat-line: color-mix(in srgb, var(--chat-text) 45%, var(--chat-surface));
   position: fixed;
   right: 20px;
   bottom: 20px;
@@ -24,11 +29,11 @@
   display: grid;
   place-items: center;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border: 1px solid color-mix(in srgb, var(--chat-line) 70%, transparent);
   border-radius: 50%;
-  background: color-mix(in srgb, var(--bg-panel) 92%, transparent);
-  color: var(--ink);
-  box-shadow: 0 16px 40px color-mix(in srgb, var(--bg-panel) 55%, transparent);
+  background: var(--chat-surface);
+  color: var(--chat-text);
+  box-shadow: 0 16px 40px color-mix(in srgb, var(--chat-surface) 55%, transparent);
   backdrop-filter: blur(14px) saturate(130%);
   -webkit-backdrop-filter: blur(14px) saturate(130%);
   cursor: pointer;
@@ -40,16 +45,16 @@
 
 .fab:hover {
   transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+  border-color: color-mix(in srgb, var(--chat-text) 60%, var(--chat-line));
 }
 
 .fab:focus-visible {
-  outline: 2px solid var(--accent2);
+  outline: 2px solid var(--chat-outer-focus);
   outline-offset: 3px;
 }
 
 .widget[data-open] .fab {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  border-color: color-mix(in srgb, var(--chat-text) 55%, var(--chat-line));
 }
 
 .icon {
@@ -84,13 +89,13 @@
 }
 
 .ringTrack {
-  stroke: color-mix(in srgb, var(--line) 60%, transparent);
+  stroke: color-mix(in srgb, var(--chat-line) 60%, transparent);
   opacity: 0;
   transition: opacity 240ms ease;
 }
 
 .ringValue {
-  stroke: var(--accent);
+  stroke: var(--chat-text);
   stroke-linecap: round;
   transition:
     stroke-dashoffset 320ms ease,
@@ -144,8 +149,8 @@
   min-width: 22px;
   padding: 2px 5px;
   border-radius: 999px;
-  background: var(--accent);
-  color: color-mix(in srgb, var(--bg) 92%, black);
+  background: var(--chat-text);
+  color: color-mix(in srgb, var(--chat-surface) 92%, black);
   font-family: "JetBrains Mono", monospace;
   font-size: 0.6rem;
   font-weight: 500;
@@ -161,10 +166,11 @@
   display: flex;
   flex-direction: column;
   padding: 18px 18px 14px;
-  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--chat-line) 80%, transparent);
   border-radius: 20px;
-  background: color-mix(in srgb, var(--bg-panel) 94%, transparent);
-  box-shadow: 0 26px 70px color-mix(in srgb, var(--bg-panel) 60%, transparent);
+  background: var(--chat-surface);
+  color: var(--chat-text);
+  box-shadow: 0 26px 70px color-mix(in srgb, var(--chat-surface) 60%, transparent);
   backdrop-filter: blur(20px) saturate(130%);
   -webkit-backdrop-filter: blur(20px) saturate(130%);
   opacity: 0;
@@ -199,7 +205,7 @@
   font-size: 0.58rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: var(--ink-faint);
+  color: var(--chat-text);
 }
 
 .title {
@@ -207,20 +213,20 @@
   font-family: "Playfair Display", Georgia, serif;
   font-size: 1.25rem;
   font-weight: 400;
-  color: var(--ink);
+  color: var(--chat-text);
 }
 
 .closeButton {
   flex: none;
-  width: 30px;
-  height: 30px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 50%;
   background: transparent;
-  color: var(--ink-sub);
+  color: var(--chat-text);
   cursor: pointer;
   transition:
     color 160ms ease,
@@ -228,8 +234,8 @@
 }
 
 .closeButton:hover {
-  color: var(--ink);
-  border-color: color-mix(in srgb, var(--line) 80%, transparent);
+  color: var(--chat-text);
+  border-color: color-mix(in srgb, var(--chat-line) 80%, transparent);
 }
 
 .closeButton svg {
@@ -249,7 +255,47 @@
   font-family: "JetBrains Mono", monospace;
   font-size: 0.66rem;
   letter-spacing: 0.01em;
-  color: var(--ink-faint);
+  color: var(--chat-text);
+}
+
+.audioCacheStatus {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 10px;
+  margin: 0 0 10px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.61rem;
+  line-height: 1.5;
+  color: var(--chat-text);
+}
+
+.audioCacheReady {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.audioCacheRetry {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--chat-text);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.audioCacheRetry:focus-visible {
+  outline: 2px solid var(--chat-text);
+  outline-offset: 2px;
 }
 
 .statusDot {
@@ -257,22 +303,22 @@
   height: 7px;
   flex: none;
   border-radius: 50%;
-  background: color-mix(in srgb, var(--ink-faint) 70%, transparent);
+  background: var(--chat-surface);
 }
 
 .status[data-state="listening"] .statusDot {
-  background: var(--accent2);
+  background: var(--chat-text);
   animation: listening-pulse 1.4s ease-in-out infinite;
 }
 
 .status[data-state="thinking"] .statusDot,
 .status[data-state="speaking"] .statusDot {
-  background: var(--accent);
+  background: var(--chat-text);
   animation: listening-pulse 900ms ease-in-out infinite;
 }
 
 .status[data-state="error"] .statusDot {
-  background: #e78284;
+  background: var(--chat-text);
 }
 
 @keyframes listening-pulse {
@@ -305,11 +351,11 @@
 .about {
   margin: 0 0 2px;
   padding: 9px 12px;
-  border: 1px dashed color-mix(in srgb, var(--line) 80%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--chat-line) 80%, transparent);
   border-radius: 14px;
   font-size: 0.74rem;
   line-height: 1.55;
-  color: var(--ink-faint);
+  color: var(--chat-text);
 }
 
 .message {
@@ -326,15 +372,15 @@
 .user {
   align-self: flex-end;
   border-bottom-right-radius: 4px;
-  background: color-mix(in srgb, var(--accent) 22%, var(--bg-panel));
-  color: var(--ink);
+  background: var(--chat-surface);
+  color: var(--chat-text);
 }
 
 .assistant {
   align-self: flex-start;
   border-bottom-left-radius: 4px;
-  background: color-mix(in srgb, var(--line) 26%, transparent);
-  color: var(--ink-sub);
+  background: transparent;
+  color: var(--chat-text);
 }
 
 .statusMessage {
@@ -345,12 +391,12 @@
   font-family: "JetBrains Mono", monospace;
   font-size: 0.62rem;
   text-align: center;
-  color: #e78284;
-  background: color-mix(in srgb, #e78284 12%, transparent);
+  color: var(--chat-text);
+  background: transparent;
 }
 
 .message[data-pending] {
-  opacity: 0.72;
+  opacity: 1;
 }
 
 .message[data-pending]::after {
@@ -381,7 +427,7 @@
   font-family: "JetBrains Mono", monospace;
   font-size: 0.64rem;
   line-height: 1.5;
-  color: var(--ink-faint);
+  color: var(--chat-text);
 }
 
 .choices {
@@ -393,27 +439,55 @@
 
 .choice {
   padding: 7px 12px;
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  border: 1px solid color-mix(in srgb, var(--chat-text) 40%, var(--chat-line));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  color: var(--ink);
+  background: var(--chat-surface);
+  color: var(--chat-text);
   font-size: 0.74rem;
   cursor: pointer;
   transition: background 160ms ease;
 }
 
 .choice:hover {
-  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  background: var(--chat-surface);
+}
+
+.replay {
+  align-self: flex-start;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  margin: -4px 0 1px 3px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--chat-line) 76%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--chat-text);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.62rem;
+  cursor: pointer;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease;
+}
+
+.replay:hover:not(:disabled) {
+  color: var(--chat-text);
+  border-color: color-mix(in srgb, var(--chat-text) 48%, var(--chat-line));
+  background: var(--chat-surface);
 }
 
 .retry {
   align-self: flex-start;
   margin-top: 10px;
   padding: 7px 12px;
-  border: 1px dashed color-mix(in srgb, var(--line) 84%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--chat-line) 84%, transparent);
   border-radius: 12px;
   background: transparent;
-  color: var(--ink-sub);
+  color: var(--chat-text);
   font-size: 0.74rem;
   cursor: pointer;
   transition:
@@ -422,13 +496,14 @@
 }
 
 .retry:hover {
-  color: var(--ink);
-  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+  color: var(--chat-text);
+  border-color: color-mix(in srgb, var(--chat-text) 50%, var(--chat-line));
 }
 
 .choice:focus-visible,
-.retry:focus-visible {
-  outline: 2px solid var(--accent2);
+.retry:focus-visible,
+.replay:focus-visible {
+  outline: 2px solid var(--chat-text);
   outline-offset: 2px;
 }
 
@@ -439,36 +514,40 @@
   gap: 8px;
   margin-top: 10px;
   padding-top: 12px;
-  border-top: 1px solid color-mix(in srgb, var(--line) 64%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--chat-line) 64%, transparent);
 }
 
 .input {
   flex: 1;
   min-width: 0;
   padding: 9px 12px;
-  border: 1px solid color-mix(in srgb, var(--line) 84%, transparent);
+  border: 1px solid color-mix(in srgb, var(--chat-line) 84%, transparent);
   border-radius: 12px;
-  background: color-mix(in srgb, var(--bg) 55%, transparent);
-  color: var(--ink);
+  background: var(--chat-surface);
+  color: var(--chat-text);
   font-size: 0.8rem;
 }
 
 .input::placeholder {
-  color: var(--ink-faint);
+  color: var(--chat-text);
 }
 
 .input:focus {
   outline: none;
-  border-color: color-mix(in srgb, var(--accent) 58%, var(--line));
+  border-color: color-mix(in srgb, var(--chat-text) 58%, var(--chat-line));
 }
 
 .send {
   flex: none;
-  padding: 9px 14px;
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--chat-text) 40%, var(--chat-line));
   border-radius: 12px;
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
-  color: var(--ink);
+  background: var(--chat-surface);
+  color: var(--chat-text);
   font-size: 0.76rem;
   cursor: pointer;
   transition:
@@ -477,11 +556,11 @@
 }
 
 .send:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: var(--chat-surface);
 }
 
 .send:disabled {
-  opacity: 0.4;
+  opacity: 1;
   cursor: not-allowed;
 }
 
@@ -504,8 +583,66 @@
   .fab,
   .panel,
   .ringValue,
-  .statusDot {
+  .statusDot,
+  .replay {
     transition: none;
     animation: none;
   }
+}
+
+/* Inverse inherited surface follows the real scroll animation. Native contrast chooses
+   black/white at the animated midpoint instead of swapping two converging colors. */
+@supports (color: contrast-color(white)) {
+  .widget {
+    --chat-surface: var(--ink);
+    --chat-text: contrast-color(var(--chat-surface));
+    --chat-outer-focus: contrast-color(var(--bg));
+  }
+}
+
+.newChat, .voiceToggle {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px;
+  border: 1px solid var(--chat-line);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--chat-text);
+  font: inherit;
+  font-size: 0.68rem;
+  cursor: pointer;
+}
+.newChat svg, .voiceToggle svg, .send svg, .replay svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.header { gap: 4px; align-items: center; }
+.headerText { flex: 1; }
+.panel button, .input { min-height: 44px; }
+.panel button:focus-visible, .input:focus-visible {
+  outline: 2px solid var(--chat-text);
+  outline-offset: 2px;
+}
+.replay:disabled, .send:disabled {
+  color: var(--chat-text);
+  border-style: dashed;
+  cursor: not-allowed;
+}
+.voiceToggle[aria-pressed="false"] { border-style: dashed; }
+.panel { overflow-y: auto; }
+@media (max-width: 520px) {
+  .panel { padding: 14px 12px; }
+  .composer { gap: 6px; }
+  .input { padding-inline: 8px; }
+  .eyebrow { letter-spacing: 0.06em; }
 }

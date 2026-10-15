@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,12 +7,13 @@ import test from "node:test";
 
 import { CvFactsError, describeFailure } from "../scripts/cv-facts/errors.mjs";
 import {
-  CHECK_SCOPE_NOTE,
+  INPUT_VERSION,
   contentSha256,
   describeFinding,
   retrievalText,
   validateArtifact,
 } from "../scripts/cv-facts/artifact.mjs";
+import type { ArtifactCard } from "../scripts/cv-facts/artifact.mjs";
 import { readSource } from "../scripts/cv-facts/paths.mjs";
 
 const workspace = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "cv-facts-check-"));
@@ -35,7 +37,7 @@ function validVector(seed: number) {
   return raw.map((value) => Number((value / norm).toFixed(6)));
 }
 
-function validCard(id: string, seed: number) {
+function validCard(id: string, seed: number): ArtifactCard {
   return {
     id,
     topic: `Topic ${seed}`,
@@ -86,10 +88,6 @@ test("a valid artifact produces no findings and reports its card count", () => {
   assert.equal(result.cardCount, 2);
 });
 
-test("the check reports that it proves neither truth nor retrieval quality", () => {
-  assert.match(CHECK_SCOPE_NOTE, /neither answer truth nor retrieval quality/);
-});
-
 test("retrieval text v1 is topic, tags and answer in that order", () => {
   assert.equal(
     retrievalText({ topic: "First workplace", tags: ["first employer", "chronological"], answer: "An answer." }),
@@ -100,8 +98,6 @@ test("retrieval text v1 is topic, tags and answer in that order", () => {
 test("the content digest covers the ordered id, topic, tags and answer", () => {
   const artifact = validArtifact();
 
-  assert.equal(artifact.embedding.contentSha256, contentSha256(artifact.cards));
-  assert.equal(contentSha256([...artifact.cards].reverse()), contentSha256([...artifact.cards].reverse()));
   assert.notEqual(
     contentSha256(artifact.cards),
     contentSha256([...artifact.cards].reverse()),
@@ -110,6 +106,59 @@ test("the content digest covers the ordered id, topic, tags and answer", () => {
     contentSha256(artifact.cards),
     contentSha256(artifact.cards.map((card) => ({ ...card, answer: `${card.answer} ` }))),
   );
+});
+
+test("ungrouped v1 content digests retain their existing identity", () => {
+  const artifact = validArtifact();
+  const records = artifact.cards.map((card) => [card.id, card.topic, card.tags, card.answer]);
+  const legacyDigest = createHash("sha256").update(JSON.stringify([INPUT_VERSION, records]), "utf8").digest("hex");
+
+  assert.equal(contentSha256(artifact.cards), legacyDigest);
+  assert.deepEqual(validateArtifact(artifact, context()).findings, []);
+});
+
+test("reviewed variant metadata is validated, digested and excluded from retrieval text", () => {
+  const artifact = validArtifact();
+  const baselineDigest = artifact.embedding.contentSha256;
+  artifact.cards[0].variantGroup = "reviewed-variants";
+  artifact.cards[1].variantGroup = "reviewed-variants";
+  artifact.embedding.contentSha256 = contentSha256(artifact.cards);
+
+  assert.notEqual(artifact.embedding.contentSha256, baselineDigest);
+  assert.equal(
+    retrievalText(artifact.cards[0]),
+    "Topic 1\ntag 1\nAnswer 1.",
+  );
+  assert.deepEqual(validateArtifact(artifact, context()).findings, []);
+
+  const changedGroup = artifact.cards.map((card) => ({ ...card, variantGroup: "other-reviewed-group" }));
+  assert.notEqual(contentSha256(changedGroup), artifact.embedding.contentSha256);
+
+  const tampered = structuredClone(artifact);
+  tampered.cards[0].variantGroup = "different-reviewed-group";
+  tampered.cards[1].variantGroup = "different-reviewed-group";
+  assert.deepEqual(validateArtifact(tampered, context()).findings.map((finding) => finding.rule), [
+    "embedding/content-digest",
+  ]);
+});
+
+test("malformed or singleton variant metadata is refused", () => {
+  assert.deepEqual(rulesFor((artifact) => {
+    artifact.cards[0].variantGroup = "";
+  }), ["card/variant-group"]);
+  assert.deepEqual(rulesFor((artifact) => {
+    artifact.cards[0].variantGroup = null;
+  }), ["card/variant-group"]);
+  assert.deepEqual(rulesFor((artifact) => {
+    artifact.cards[0].variantGroup = "Not a safe group";
+  }), ["card/variant-group"]);
+  assert.deepEqual(rulesFor((artifact) => {
+    artifact.cards[0].variantGroup = "reviewed-variants";
+  }), ["card/variant-group-singleton", "embedding/content-digest"]);
+  assert.deepEqual(rulesFor((artifact) => {
+    artifact.cards[0].variantGroup = "reviewed-variants";
+    artifact.cards[0].unreviewed = true;
+  }), ["card/keys", "card/variant-group-singleton", "embedding/content-digest"]);
 });
 
 test("the content digest cannot be forged through an array boundary", () => {

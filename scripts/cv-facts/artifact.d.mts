@@ -22,6 +22,7 @@ export interface ArtifactCard {
   sourceRefs: { startLine: number; endLine: number }[];
   answer: string;
   vector: number[];
+  variantGroup?: string;
 }
 
 export interface Artifact {

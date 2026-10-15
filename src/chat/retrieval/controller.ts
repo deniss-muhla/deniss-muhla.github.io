@@ -14,7 +14,8 @@
  * state; superseded and cancelled embedding work never falls back to a prepared answer.
  * Nothing here reports readiness, formats text or renders anything; that is the chat's work.
  *
- * A conversation carries one piece of state: the card it answered last. An ordinal that
+ * A conversation remembers the card it answered last and its pending offered choices.
+ * Greeting starters are sampled once and carry no retrieval score. An ordinal that
  * names a reviewed topic word ("second workplace") picks that position of the topic group
  * straight from the index without an embedding, and a question of at most three tokens is
  * embedded with the last answered topic appended, so a short follow-up carries the context
@@ -23,7 +24,7 @@
  * design decision 9 refuses before it offers choices the visitor did not earn, and a
  * position pick has no score to offer.
  */
-import { findCard, type AnswerCard, type ReviewedIndex } from "./index.ts";
+import { findCard, type AnswerCard, type ReviewedIndex, type SourceRange } from "./index.ts";
 import { RetrievalError } from "./errors.ts";
 import { STOPWORDS, findLexicalMatch } from "./lexical.ts";
 import { rankCards } from "./scoring.ts";
@@ -58,6 +59,8 @@ export type Answer =
       weak: boolean;
       /** Present exactly when `matching` is `limited`. */
       limitedCause?: LimitedCause;
+      /** Existing reviewed line references for page-side section navigation. */
+      sourceRefs?: SourceRange[];
     }
   | { kind: "clarify"; choices: ClarificationChoice[] }
   | { kind: "rephrase"; matching: Matching; limitedCause?: LimitedCause }
@@ -66,16 +69,25 @@ export type Answer =
   | { kind: "superseded" }
   | { kind: "ask-question" };
 
+/** A reviewed topic offered without a question or a similarity score. */
+export type FactTopicChoice = Pick<ClarificationChoice, "cardId" | "topic">;
+
 export interface RetrievalController {
   /**
    * Answers one trimmed or untrimmed question. A new question clears any pending choice;
    * an ordinal follow-up with a discussed topic word resolves without an embedding.
    */
   ask(question: string, encoder: QuestionEncoder | null): Promise<Answer>;
-  /** Resolves a pick from the last clarification without a second embedding. */
+  /** Samples up to three distinct prepared topics once per conversation, without inference. */
+  offerStarters(): readonly FactTopicChoice[];
+  /** A real question or selection permanently dismisses this conversation's starters. */
+  dismissStarters(): void;
+  /** Resolves only a currently offered clarification or starter, without another retrieval. */
   chooseClarification(cardId: string): Answer | null;
   /** The choices currently on offer, or `null` when none are pending. */
   pendingChoices(): readonly ClarificationChoice[] | null;
+  /** Clears conversation context and invalidates pending inference, retaining the index. */
+  resetConversation(): void;
 }
 
 /** A question of at most this many tokens counts as a short follow-up. */
@@ -172,8 +184,10 @@ function topicWordOf(remaining: readonly string[], vocabulary: ReadonlySet<strin
   return null;
 }
 
-export function createRetrievalController(index: ReviewedIndex): RetrievalController {
+export function createRetrievalController(index: ReviewedIndex, random: () => number = Math.random): RetrievalController {
   let offered: ClarificationChoice[] | null = null;
+  let starters: readonly FactTopicChoice[] | null = null;
+  let startersDismissed = false;
   let latestRequest = 0;
   /** The card this conversation answered last: the anchor every follow-up resolves against. */
   let answered: AnswerCard | null = null;
@@ -223,6 +237,7 @@ export function createRetrievalController(index: ReviewedIndex): RetrievalContro
       answer: card.answer,
       matching: "semantic",
       weak: false,
+      sourceRefs: card.sourceRefs,
     };
   }
 
@@ -258,6 +273,7 @@ export function createRetrievalController(index: ReviewedIndex): RetrievalContro
       answer: card?.answer ?? "",
       matching: "semantic",
       weak: selection.weak,
+      sourceRefs: card?.sourceRefs ?? [],
     };
   }
 
@@ -280,6 +296,7 @@ export function createRetrievalController(index: ReviewedIndex): RetrievalContro
       matching: "limited",
       weak: false,
       limitedCause: cause,
+      sourceRefs: card?.sourceRefs ?? [],
     };
   }
 
@@ -288,6 +305,7 @@ export function createRetrievalController(index: ReviewedIndex): RetrievalContro
       // Starting a question immediately replaces any pending choice and supersedes older work.
       const request = ++latestRequest;
       offered = null;
+      startersDismissed = true;
 
       const trimmed = question.trim();
 
@@ -321,29 +339,57 @@ export function createRetrievalController(index: ReviewedIndex): RetrievalContro
 
       if (request !== latestRequest) return { kind: "superseded" };
 
-      return fromSelection(selectAnswer(rankCards(index, vector)));
+      return fromSelection(selectAnswer(rankCards(index, vector), random));
+    },
+
+    offerStarters() {
+      if (startersDismissed || offered !== null) return [];
+      if (starters !== null) return starters;
+
+      let available = [...index.cards];
+      const sampled: FactTopicChoice[] = [];
+      while (sampled.length < 3 && available.length > 0) {
+        const position = Math.min(available.length - 1, Math.max(0, Math.floor(random() * available.length)));
+        const card = available[position];
+        sampled.push(Object.freeze({ cardId: card.id, topic: card.topic }));
+        available = available.filter((candidate) => candidate.topic !== card.topic);
+      }
+      starters = Object.freeze(sampled);
+      return starters;
+    },
+
+    dismissStarters() {
+      startersDismissed = true;
     },
 
     chooseClarification(cardId) {
-      if (offered === null) return null;
-
-      const chosen = resolveClarification(offered, cardId);
-
-      if (chosen === null) return null;
-
+      const chosen = offered !== null
+        ? resolveClarification(offered, cardId)
+        : startersDismissed ? null : starters?.find((choice) => choice.cardId === cardId);
+      if (chosen == null) return null;
       const card = findCard(index, chosen.cardId);
+      if (card === undefined) return null;
 
       offered = null;
-      if (card !== undefined) answered = card;
-
+      startersDismissed = true;
+      answered = card;
       return {
         kind: "answer",
-        cardId: chosen.cardId,
-        topic: card?.topic ?? chosen.topic,
-        answer: card?.answer ?? "",
+        cardId: card.id,
+        topic: card.topic,
+        answer: card.answer,
         matching: "semantic",
         weak: false,
+        sourceRefs: card.sourceRefs,
       };
+    },
+
+    resetConversation() {
+      latestRequest += 1;
+      offered = null;
+      starters = null;
+      startersDismissed = false;
+      answered = null;
     },
 
     pendingChoices() {

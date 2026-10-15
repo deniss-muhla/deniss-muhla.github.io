@@ -36,6 +36,7 @@ const SECTION_AREAS = new Map([
   ["current focus", "focus"],
   ["experience", "employment"],
   ["strengths", "strengths"],
+  ["core expertise", "strengths"],
   ["technology stack", "technology"],
   ["language", "languages"],
   ["certificates", "certificates"],
@@ -146,6 +147,7 @@ export function extractSourceUnits(markdown) {
   let section = null;
   let employer = null;
   let sawTitle = false;
+  let profileStatementCount = 0;
 
   const pushUnit = (unit) => {
     units.push(unit);
@@ -282,10 +284,11 @@ export function extractSourceUnits(markdown) {
         throw new CvFactsError("extract/unexpected-block", { lines: linesOf(node) });
       }
 
+      profileStatementCount += 1;
       pushUnit({
         area: "profile",
         kind: "note",
-        cardId: "profile-statement",
+        cardId: profileStatementCount === 1 ? "profile-statement" : `profile-statement-${profileStatementCount}`,
         label: "profile statement",
         lines: linesOf(node),
         text: nodeText(node).trim(),
@@ -335,10 +338,11 @@ export function extractSourceUnits(markdown) {
     }
 
     omissions.push({ kind: "table-header", reason: "format-only", lines: linesOf(header) });
+    const levelColumn = header.children.findIndex((cell) => normalizeHeading(nodeText(cell)) === "level");
 
     for (const row of rows) {
       const cells = row.children.map((cell) => nodeText(cell).trim());
-      const [label, level] = cells;
+      const [label] = cells;
 
       if (!label) throw new CvFactsError("extract/technology-row-unreadable", { lines: linesOf(row) });
 
@@ -349,7 +353,7 @@ export function extractSourceUnits(markdown) {
         label,
         lines: linesOf(row),
         items: cells,
-        level: level ?? "",
+        ...(levelColumn >= 0 ? { level: cells[levelColumn] ?? "" } : {}),
       });
     }
   }

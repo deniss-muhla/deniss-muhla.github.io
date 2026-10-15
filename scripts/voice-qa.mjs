@@ -1,13 +1,14 @@
 /**
  * Voice-assistant QA harness (Playwright).
  *
- * Launches its own headed Chrome instance, then verifies:
+ * Voice workload blocked before launch pending live-on-open maintenance (see guard below).
+ * The retained footer-consent workload previously launched headed Chrome and verified:
  *   1. cross-origin isolation after service-worker registration,
- *   2. background model prefetch progress and the one-shot "ready" blink,
- *   3. the greeting,
- *   4. optionally, a full voice turn from a fake microphone WAV,
- *   5. a typed answer through the retrieval path (resolving a clarification choice when
- *      the reply offers one, and failing when a notice or error arrives instead),
+ *   2. the closed-panel consent choices and on-demand model loading,
+ *   3. the greeting (silent in typed-only mode; played only after live-voice consent),
+ *   4. optionally, a full voice turn from an explicitly requested fake microphone WAV,
+ *   5. a typed answer through the retrieval path (silent in typed mode, with an explicit
+ *      stored-plan Replay check; resolving clarification when offered and failing on a notice/error),
  *   6. an offline reload served from cache with the models still usable,
  *   7. the metered lifecycle: data saving reported before the explicit open, on-demand
  *      loading only after it, and a typed question while the models load,
@@ -29,9 +30,11 @@
  *
  * With a fake microphone (Chrome plays the WAV as a live capture device):
  *
- *   VOICE_WAV=/tmp/question.wav node scripts/voice-qa.mjs
+ *   VOICE_WAV=/tmp/generated-neutral.wav node scripts/voice-qa.mjs
  *
  * Environment: BASE_URL, MODELS_TIMEOUT_MS, VOICE_WAV, HEADLESS, CHROME_CHANNEL.
+ * A fake WAV selects the live UI choice; Playwright's microphone permission is fixture setup,
+ * separate from the app's explicit consent button. A default run stays typed-only and grants no mic permission.
  * Ordinary QA screenshots are written to /tmp/voice-qa-*.png; the browser is always closed.
  *
  * Note: use a static server that sends no COOP/COEP headers; the service worker
@@ -40,14 +43,15 @@
 import { chromium } from "playwright-core";
 import {
   qaCompletedVoiceTurnSince,
+  qaFiniteFakeAudioCaptureArg,
   qaMatchLabel,
   qaMeteredPhase,
-  qaModelsReady,
   qaNoteKind,
   qaOfflineReloadSucceeded,
   qaTurnSpeech,
   qaEntryTerminalLine,
   qaTypedOutcome,
+  qaVoiceConsentChoice,
   selectQaMode,
 } from "./voice-qa-checks.ts";
 import { logQaContent, logQaError, qaUrl, takeQaScreenshot } from "./voice-qa-privacy.ts";
@@ -58,6 +62,7 @@ const MODELS_TIMEOUT_MS = Number(process.env.MODELS_TIMEOUT_MS ?? 900_000);
 const VOICE_WAV = process.env.VOICE_WAV;
 const HEADLESS = process.env.HEADLESS === "true";
 const CHROME_CHANNEL = process.env.CHROME_CHANNEL ?? "chrome";
+const CONSENT_CHOICE = qaVoiceConsentChoice(Boolean(VOICE_WAV));
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -96,6 +101,9 @@ if (qaMode === "retrieval") {
   const { runRetrievalQa } = await import("./retrieval-qa.mjs");
   await runRetrievalQa();
 } else {
+  // Preserve the old workload for a separately approved live-on-open harness update.
+  console.error("[qa] Voice QA is blocked: update the live-on-open consent, typed and Replay workload before running it. Use owner-started pnpm dev and docs/manual-testing.md for interaction testing.");
+  process.exit(1);
   try {
     ownedBrowser = await chromium.launch({
       channel: CHROME_CHANNEL,
@@ -103,18 +111,29 @@ if (qaMode === "retrieval") {
       args: [
         "--no-first-run",
         "--no-default-browser-check",
-        "--autoplay-policy=no-user-gesture-required",
         "--use-fake-device-for-media-stream",
-        ...(VOICE_WAV ? [`--use-file-for-fake-audio-capture=${VOICE_WAV}`] : []),
+        ...(VOICE_WAV ? [qaFiniteFakeAudioCaptureArg(VOICE_WAV)] : []),
       ],
     });
 
     const QA_URL = qaUrl(BASE_URL, REDACTED);
     const context = await ownedBrowser.newContext({
       viewport: { width: 1280, height: 900 },
-      ...(REDACTED && !VOICE_WAV ? {} : { permissions: ["microphone"] }),
     });
     const page = await context.newPage();
+    const audioRequestCounts = { manifests: 0, hashedClips: 0 };
+    page.on("request", (request) => {
+      let pathname;
+      try {
+        pathname = new URL(request.url()).pathname;
+      } catch {
+        return;
+      }
+      if (pathname === "/audio/assistant/manifest.json") audioRequestCounts.manifests += 1;
+      else if (/^\/audio\/assistant\/[a-z0-9-]+-[a-f0-9]{64}\.mp3$/.test(pathname)) {
+        audioRequestCounts.hashedClips += 1;
+      }
+    });
     page.on("console", (message) => {
       if (REDACTED) {
         if (message.type() === "error") console.log("[console:error] (content redacted)");
@@ -130,9 +149,6 @@ if (qaMode === "retrieval") {
       console.log("[pageerror]", error.message);
     });
 
-    const statusOf = (targetPage) =>
-      targetPage.evaluate(() => document.querySelector('[data-testid="voice-status"]')?.textContent?.trim() ?? "");
-    const status = () => statusOf(page);
     const messagesOf = (targetPage) =>
       targetPage.evaluate(() =>
         [...document.querySelectorAll('[data-testid="voice-messages"] > p')].map((node) => ({
@@ -241,8 +257,9 @@ if (qaMode === "retrieval") {
         };
       });
 
-    /** The status line returns to listening once an answer's speech finished. */
-    const waitForTurnSettled = (label) => waitFor(async () => (await statusState()) === "listening", 60_000, label);
+    /** Live turns settle to listening; silent typed turns settle to idle. */
+    const waitForTurnSettled = (label) =>
+      waitFor(async () => ["listening", "idle"].includes(await statusState()), 60_000, label);
 
     /** The reply to the newest user message with this text, only once a new assistant message exists. */
     const parityReplyState = (targetPage, question, assistantBaseline) =>
@@ -359,38 +376,36 @@ if (qaMode === "retrieval") {
       });
     }
 
-    const prefetchStart = Date.now();
-    let lastStatus = "";
-    let sawBlink = false;
-    while (Date.now() - prefetchStart < MODELS_TIMEOUT_MS) {
-      const state = await page.evaluate(() => {
-        const fab = document.querySelector('[data-testid="voice-fab"]');
-        return {
-          loading: fab?.hasAttribute("data-loading") ?? false,
-          blink: fab?.hasAttribute("data-blink") ?? false,
-          status: document.querySelector('[data-testid="voice-status"]')?.textContent?.trim() ?? "",
-        };
-      });
-      if (state.status !== lastStatus) {
-        const elapsed = ((Date.now() - prefetchStart) / 1000).toFixed(0);
-        if (REDACTED) console.log(`[qa] ${elapsed}s readiness status changed`);
-        else console.log(`[qa] ${elapsed}s ${state.status}`);
-        lastStatus = state.status;
-      }
-      sawBlink ||= state.blink;
-      if (!state.loading && state.status.startsWith("Ready")) break;
-      await sleep(1500);
+    const closedStateBeforeChoice = await page.evaluate(() => ({
+      open: document.querySelector('[data-testid="voice-fab"]')?.getAttribute("aria-expanded") === "true",
+    }));
+    if (closedStateBeforeChoice.open) throw new Error("panel-open-before-choice");
+    if (audioRequestCounts.manifests !== 0 || audioRequestCounts.hashedClips !== 0) {
+      throw new Error("audio-request-before-choice");
     }
-    console.log(`[qa] prefetch finished in ${((Date.now() - prefetchStart) / 1000).toFixed(0)}s; blink=${sawBlink}`);
-    await takeQaScreenshot(page, "/tmp/voice-qa-01-ready.png", REDACTED);
+    await takeQaScreenshot(page, "/tmp/voice-qa-01-closed.png", REDACTED);
 
-    // Opening the panel starts capture; snapshot before it, and run typed QA afterward.
-    const microphoneBaseline = VOICE_WAV ? (await messages()).length : 0;
+    // Opening enables silent typing. The browser permission grant below is fixture
+    // setup for the WAV; the app starts audio/STT only after the footer voice action.
+    const microphoneBaseline = CONSENT_CHOICE === "live" ? (await messages()).length : 0;
     await page.getByTestId("voice-fab").click();
-    // The greeting is the first assistant message after the panel opens; it precedes
-    // every user message, so the answer search below never reaches it.
+    await page.getByTestId("voice-toggle").waitFor({ state: "visible", timeout: 15_000 });
+    await page.getByTestId("voice-input").waitFor({ state: "visible", timeout: 15_000 });
+    if (CONSENT_CHOICE === "live") {
+      await context.grantPermissions(["microphone"], { origin: new URL(QA_URL).origin });
+      await page.getByTestId("voice-toggle").click();
+    }
     await waitFor(async () => (await messages()).some((m) => m.assistant), 30_000, "greeting");
-    await sleep(2500);
+    await sleep(250);
+    if (CONSENT_CHOICE === "live") {
+      await waitFor(
+        () => audioRequestCounts.manifests > 0 && audioRequestCounts.hashedClips > 0,
+        45_000,
+        "consented-greeting-audio",
+      );
+    } else if (audioRequestCounts.manifests !== 0 || audioRequestCounts.hashedClips !== 0) {
+      throw new Error("typed-greeting-not-silent");
+    }
     logQaContent(REDACTED, console.log, "[qa] greeting:", JSON.stringify((await messages()).find((m) => m.assistant)?.text));
     await takeQaScreenshot(page, "/tmp/voice-qa-02-greeting.png", REDACTED);
 
@@ -483,8 +498,13 @@ if (qaMode === "retrieval") {
       if (!parity.spoke) throw new Error("parity-speech-missing");
     }
 
-    // Must match the voice fixture's question.txt: the typed-answer check needs a covered question, and refusal behavior is covered separately by the 8.3 matrix.
+    // A known covered question exercises the typed path; no fixture file is read.
+    if (CONSENT_CHOICE === "live") {
+      await page.getByRole("button", { name: "Close chat", exact: true }).click();
+      await page.getByTestId("voice-fab").click();
+    }
     const question = "what was the first employer";
+    const typedAudioBaseline = { ...audioRequestCounts };
     await page.getByTestId("voice-input").fill(question);
     await page.getByRole("button", { name: "Send" }).click();
     const typed = await waitForOutcome(page, question, 240_000, "typed outcome");
@@ -505,6 +525,16 @@ if (qaMode === "retrieval") {
       // A notice or an error means the required typed answer never arrived.
       throw new Error(`typed-outcome:${typed.outcome}`);
     }
+    await waitForTurnSettled("typed-answer-silent-settled");
+    if (audioRequestCounts.manifests !== typedAudioBaseline.manifests || audioRequestCounts.hashedClips !== typedAudioBaseline.hashedClips) {
+      throw new Error("typed-answer-played-before-replay");
+    }
+    await page.getByTestId("voice-replay").last().click();
+    await waitForTurnSettled("typed-stored-plan-replay-settled");
+    if (audioRequestCounts.hashedClips <= typedAudioBaseline.hashedClips) {
+      throw new Error("typed-stored-plan-replay-missing");
+    }
+    if (REDACTED) console.log("[qa] typed answer stayed silent until explicit stored-plan Replay");
     await takeQaScreenshot(page, "/tmp/voice-qa-04-answer.png", REDACTED);
 
     const noteTexts = await page.evaluate(() =>
@@ -563,7 +593,9 @@ if (qaMode === "retrieval") {
         fabClosed:
           document.querySelector('[data-testid="voice-fab"]')?.getAttribute("aria-expanded") ===
           "false",
-        ready: document.querySelector('[data-testid="voice-status"]')?.textContent?.trim() === "Ready.",
+        consentReset:
+          document.querySelector('[data-testid="voice-toggle"]')?.getAttribute("aria-label") === "Enable live voice" &&
+          !!document.querySelector('[data-testid="voice-input"]'),
         idle:
           document.querySelector('[data-testid="voice-status"]')?.getAttribute("data-state") === "idle",
         noNewMessages:
@@ -572,7 +604,7 @@ if (qaMode === "retrieval") {
       beforeExit,
     );
     console.log("[qa] ui exit:", JSON.stringify(exit));
-    if (!exit.panelHidden || !exit.fabClosed || !exit.ready || !exit.idle || !exit.noNewMessages) {
+    if (!exit.panelHidden || !exit.fabClosed || !exit.consentReset || !exit.idle || !exit.noNewMessages) {
       throw new Error("exit-check-failed");
     }
 
@@ -591,7 +623,6 @@ if (qaMode === "retrieval") {
         online: offlineState.online,
         isolated: offlineState.isolated,
         hasBadge: offlineState.badge !== null,
-        ready: offlineState.status?.startsWith("Ready") ?? false,
       }));
     } else {
       console.log("[qa] offline:", JSON.stringify(offlineState));
@@ -605,12 +636,37 @@ if (qaMode === "retrieval") {
     }
     await takeQaScreenshot(page, "/tmp/voice-qa-05-offline.png", REDACTED);
 
-    await waitFor(async () => qaModelsReady(await status()), 120_000, "offline models");
-    const offlineReadyStatus = await status();
-    if (REDACTED) console.log("[qa] offline models ready");
-    else console.log("[qa] offline model status:", offlineReadyStatus);
-
-    await takeQaScreenshot(page, "/tmp/voice-qa-06-offline-ready.png", REDACTED);
+    const offlineAssistantBaseline = (await messages()).filter((message) => message.assistant).length;
+    const offlineClipBaseline = audioRequestCounts.hashedClips;
+    await page.getByTestId("voice-fab").click();
+    await page.getByTestId("voice-input").waitFor({ state: "visible", timeout: 15_000 });
+    await page.getByTestId("voice-input").fill(question);
+    await page.getByRole("button", { name: "Send" }).click();
+    const offlineOutcome = await waitForNewOutcome(
+      page,
+      question,
+      offlineAssistantBaseline,
+      240_000,
+      "offline typed outcome",
+    );
+    if (offlineOutcome.outcome === "clarify") {
+      const choiceBaseline = (await messages()).filter((message) => message.assistant).length;
+      await page.getByTestId("voice-choice").first().click();
+      await resolveChoice(page, choiceBaseline, 60_000);
+    } else if (offlineOutcome.outcome !== "answer") {
+      throw new Error(`offline-typed-${offlineOutcome.outcome}`);
+    }
+    await waitForTurnSettled("offline-typed-silent-settled");
+    if (audioRequestCounts.hashedClips !== offlineClipBaseline) {
+      throw new Error("offline-typed-answer-played-before-replay");
+    }
+    await page.getByTestId("voice-replay").last().click();
+    await waitForTurnSettled("offline-stored-plan-replay-settled");
+    const offlineCleanup = await cleanupState();
+    if (offlineCleanup.speechFailed || audioRequestCounts.hashedClips <= offlineClipBaseline) {
+      throw new Error("offline-stored-plan-replay-missing");
+    }
+    if (REDACTED) console.log("[qa] cached typed answer audio played only after explicit Replay");
 
     await context.setOffline(false);
 
@@ -628,7 +684,9 @@ if (qaMode === "retrieval") {
     const meteredObservation = async (overrides) => {
       const observed = await meteredPage.evaluate(() => ({
         saveData: navigator.connection?.saveData === true,
-        statusText: document.querySelector('[data-testid="voice-status"]')?.textContent?.trim() ?? "",
+        statusText:
+          document.querySelector('[role="status"]')?.textContent?.trim() ??
+          document.querySelector('[data-testid="voice-status"]')?.textContent?.trim() ?? "",
         loading: document.querySelector('[data-testid="voice-fab"]')?.hasAttribute("data-loading") ?? false,
         loadingSeen: window.__meteredLoadingSeen === true,
       }));
@@ -699,6 +757,7 @@ if (qaMode === "retrieval") {
     } else if (meteredTyped.outcome !== "answer") {
       throw new Error(`metered-outcome:${meteredTyped.outcome}`);
     }
+    await waitForTurnSettled("metered-silent-answer-settled");
     console.log("[qa] metered outcome: answer");
     meteredPhase = qaMeteredPhase(
       meteredPhase,
@@ -706,14 +765,13 @@ if (qaMode === "retrieval") {
     );
     console.log(`[qa] metered phase: ${meteredPhase}`);
 
-    // Readiness is read with the panel closed, the same as the offline check above.
-    await meteredPage.getByRole("button", { name: "Close chat" }).click();
-    await waitFor(
-      async () => qaModelsReady(await statusOf(meteredPage)),
-      MODELS_TIMEOUT_MS,
-      "metered models",
+    const typedReady = await meteredPage.evaluate(() =>
+      !document.querySelector('[data-testid="voice-fab"]')?.hasAttribute("data-loading") &&
+      document.querySelector('[data-testid="voice-status"]')?.getAttribute("data-state") === "idle",
     );
-    console.log("[qa] metered models ready");
+    if (!typedReady) throw new Error("metered-typed-route-not-settled");
+    await meteredPage.getByRole("button", { name: "Close chat" }).click();
+    console.log("[qa] metered typed route settled without waiting for STT readiness");
   } catch (error) {
     logQaError(error, REDACTED, console.error);
     process.exitCode = 1;

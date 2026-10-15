@@ -144,6 +144,84 @@ test("an ineligible runner-up does not force a clarification", () => {
   assert.equal(selection.kind === "answer" && selection.weak, true);
 });
 
+test("two close members of one reviewed group choose only a close member with injectable RNG", () => {
+  const ranking = rankingOf([
+    { id: "synthetic-near", topic: "Near", score: 0.62, variantGroup: "reviewed-variants" },
+    { id: "synthetic-also-near", topic: "Also near", score: 0.58, variantGroup: "reviewed-variants" },
+    { id: "synthetic-not-close", topic: "Not close", score: 0.4, variantGroup: "reviewed-variants" },
+  ]);
+
+  assert.deepEqual(selectAnswer(ranking, () => 0), {
+    kind: "answer", cardId: "synthetic-near", score: 0.62, weak: false,
+  });
+  assert.deepEqual(selectAnswer(ranking, () => 1), {
+    kind: "answer", cardId: "synthetic-also-near", score: 0.58, weak: true,
+  });
+});
+
+test("a third distinct close contender clarifies after two reviewed variants", () => {
+  const selection = selectAnswer(rankingOf([
+    { id: "synthetic-variant-one", topic: "Variant one", score: 0.7, variantGroup: "reviewed-variants" },
+    { id: "synthetic-variant-two", topic: "Variant two", score: 0.69, variantGroup: "reviewed-variants" },
+    { id: "synthetic-distinct", topic: "Distinct topic", score: 0.68 },
+  ]), () => assert.fail("randomness must not resolve a distinct contender"));
+
+  assert.deepEqual(selection, {
+    kind: "clarify",
+    choices: [
+      { cardId: "synthetic-variant-one", topic: "Variant one", score: 0.7 },
+      { cardId: "synthetic-distinct", topic: "Distinct topic", score: 0.68 },
+    ],
+  });
+});
+
+test("group names cannot collide with card ids", () => {
+  const selection = selectAnswer(rankingOf([
+    { id: "synthetic-alpha", topic: "Variant", score: 0.7, variantGroup: "synthetic-beta" },
+    { id: "synthetic-beta", topic: "Distinct", score: 0.69 },
+    { id: "synthetic-gamma", topic: "Variant", score: 0.68, variantGroup: "synthetic-beta" },
+  ]), () => assert.fail("the group and card id are separate contenders"));
+
+  assert.equal(selection.kind, "clarify");
+  assert.deepEqual(selection.kind === "clarify" ? selection.choices.map((choice) => choice.cardId) : [], [
+    "synthetic-alpha", "synthetic-beta",
+  ]);
+});
+
+test("below-floor and non-close group members never enter randomized selection", () => {
+  const selection = selectAnswer(rankingOf([
+    { id: "synthetic-near", topic: "Near", score: 0.58, variantGroup: "reviewed-variants" },
+    { id: "synthetic-below-floor", topic: "Below floor", score: 0.44, variantGroup: "reviewed-variants" },
+  ]), () => assert.fail("a singleton close group member is deterministic"));
+
+  assert.deepEqual(selection, { kind: "answer", cardId: "synthetic-near", score: 0.58, weak: true });
+});
+
+test("a non-close member in the same group does not change the deterministic answer", () => {
+  let randomCalls = 0;
+  const selection = selectAnswer(rankingOf([
+    { id: "synthetic-near", topic: "Near", score: 0.7, variantGroup: "reviewed-variants" },
+    { id: "synthetic-far", topic: "Far", score: 0.6, variantGroup: "reviewed-variants" },
+  ]), () => { randomCalls += 1; return 1; });
+
+  assert.deepEqual(selection, { kind: "answer", cardId: "synthetic-near", score: 0.7, weak: false });
+  assert.equal(randomCalls, 0);
+});
+
+test("the margin remains strict and an exact floor score is eligible", () => {
+  const exactMargin = selectAnswer(rankingOf([
+    { id: "synthetic-best", topic: "Best", score: 0.75, variantGroup: "reviewed-variants" },
+    { id: "synthetic-at-margin", topic: "At margin", score: 0.7, variantGroup: "reviewed-variants" },
+  ]), () => assert.fail("a member at the strict margin is not randomized"));
+  const exactFloor = selectAnswer(rankingOf([
+    { id: "synthetic-best", topic: "Best", score: 0.46 },
+    { id: "synthetic-at-floor", topic: "At floor", score: 0.45 },
+  ]));
+
+  assert.equal(exactMargin.kind, "answer");
+  assert.equal(exactFloor.kind, "clarify");
+});
+
 test("a chosen clarification resolves an offered id without a second inference", () => {
   const offered = [
     { cardId: "synthetic-alpha", topic: "Alpha topic", score: 0.7 },

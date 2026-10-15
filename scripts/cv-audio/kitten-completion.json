@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "transformersVersion": "4.57.3",
+  "generationUtilsPath": "transformers/generation/utils.py",
+  "generationUtilsSha256": "a20024b1e82ed5361a524d238d2197be5407abc91297dd9888c57e8284d63fef"
+}

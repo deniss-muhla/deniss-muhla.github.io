@@ -31,7 +31,7 @@ conflicting dates with the profile owner before changing the published CV.
 
 ## Reviewed answer index
 
-`cv/facts.json` is the one derived file kept here. It holds 36 reviewed cards, each with a topic,
+`cv/facts.json` is the one derived file kept here. It holds reviewed cards, each with a topic,
 descriptive tags, the CV line ranges the answer came from, one concise answer and a stored
 embedding vector. It is generated from `cv/source/cv.md` and from nothing else.
 
@@ -44,7 +44,7 @@ analysis, the candidate, the per-section snapshots, the review records and the m
 order is prepare, author, source review, embed, offline check, then explicit promotion. The offline
 check runs in `build` and `build:site`, so a stale index fails the build. The commands are
 `pnpm cv:facts`, `pnpm cv:facts:embed`, `pnpm cv:facts:check` and `pnpm cv:facts:promote`; the
-`.agents/skills/cv-facts` skill documents them in full.
+[cv-facts skill](../.github/skills/cv-facts/SKILL.md) documents them in full.
 
 Coverage is recorded as mapped source units plus deliberate omissions. Every extracted unit has at
 least one card drawing on it, and the omissions that remain are recorded individually with their

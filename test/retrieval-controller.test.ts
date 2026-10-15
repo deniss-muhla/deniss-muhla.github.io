@@ -17,7 +17,8 @@ import {
 } from "../src/chat/retrieval/controller.ts";
 import { RetrievalError } from "../src/chat/retrieval/errors.ts";
 import { createRetrievalEncoder } from "../src/chat/retrieval/encoder/index.ts";
-import { SYNTHETIC_CARDS, WORKPLACE_CARDS, axisVector, syntheticIndex, tiedIndex } from "./retrieval-fixtures.ts";
+import { readReviewedIndex } from "../src/chat/retrieval/index.ts";
+import { SYNTHETIC_CARDS, WORKPLACE_CARDS, axisVector, syntheticArtifact, syntheticIndex, tiedIndex, type SyntheticCardSpec } from "./retrieval-fixtures.ts";
 
 const COVERED_QUESTION = "calendar scheduling";
 const INADEQUATE_QUESTION = "calendar payments audio";
@@ -42,7 +43,8 @@ function countingEncoder(
 }
 
 test("with no encoder the answer is limited matching and still comes from the index", async () => {
-  const controller = createRetrievalController(syntheticIndex());
+  const index = syntheticIndex();
+  const controller = createRetrievalController(index);
   const answer = await controller.ask(COVERED_QUESTION, null);
 
   assert.equal(answer.kind, "answer");
@@ -50,6 +52,7 @@ test("with no encoder the answer is limited matching and still comes from the in
   assert.equal(answer.kind === "answer" && answer.limitedCause, "model-unavailable");
   assert.equal(answer.kind === "answer" && answer.cardId, "synthetic-calendar");
   assert.equal(answer.kind === "answer" && answer.answer, SYNTHETIC_CARDS[0].answer);
+  assert.deepEqual(answer.kind === "answer" && answer.sourceRefs, index.cards[0].sourceRefs);
 });
 
 test("an inadequate lexical match asks for a rephrase instead of guessing", async () => {
@@ -70,7 +73,8 @@ test("a question with no meaningful words cannot produce a limited answer", asyn
 });
 
 test("once an encoder is supplied the same question is answered semantically", async () => {
-  const controller = createRetrievalController(syntheticIndex());
+  const index = syntheticIndex();
+  const controller = createRetrievalController(index);
   const encoder = countingEncoder();
 
   const limited = await controller.ask(COVERED_QUESTION, null);
@@ -81,6 +85,7 @@ test("once an encoder is supplied the same question is answered semantically", a
   assert.equal(semantic.kind === "answer" && semantic.matching, "semantic");
   assert.equal(semantic.kind === "answer" && semantic.cardId, "synthetic-calendar");
   assert.equal(semantic.kind === "answer" && semantic.limitedCause, undefined);
+  assert.deepEqual(semantic.kind === "answer" && semantic.sourceRefs, index.cards[0].sourceRefs);
   assert.equal(encoder.calls, 1);
 });
 
@@ -120,7 +125,60 @@ test("the weak cue is separate from the prepared answer text", async () => {
   assert.equal(answer.kind === "answer" && answer.cardId, "synthetic-calendar");
   assert.equal(answer.kind === "answer" && answer.weak, true);
   assert.equal(answer.kind === "answer" && answer.answer, SYNTHETIC_CARDS[0].answer);
+  assert.deepEqual(answer.kind === "answer" && answer.sourceRefs, weakIndex.cards[0].sourceRefs);
   assert.equal(WEAK_MATCH_CUE.includes(SYNTHETIC_CARDS[0].answer), false);
+});
+
+test("variant selection preserves the chosen card, answer and source identity", async () => {
+  const cards = [
+    { ...SYNTHETIC_CARDS[0], id: "synthetic-variant-alpha", variantGroup: "reviewed-variants" },
+    { ...SYNTHETIC_CARDS[0], id: "synthetic-variant-beta", answer: "A second synthetic answer.", variantGroup: "reviewed-variants" },
+    { ...SYNTHETIC_CARDS[1], id: "synthetic-distinct", axis: 2 },
+  ];
+  const artifact = syntheticArtifact(cards) as { cards: Record<string, unknown>[] };
+  artifact.cards[1].sourceRefs = [{ startLine: 7, endLine: 8 }];
+  const index = readReviewedIndex(artifact);
+  const controller = createRetrievalController(index, () => 1);
+  const selected = await controller.ask(COVERED_QUESTION, countingEncoder(axisVector(0)));
+
+  assert.equal(selected.kind, "answer");
+  assert.equal(selected.kind === "answer" && selected.cardId, "synthetic-variant-beta");
+  assert.equal(selected.kind === "answer" && selected.answer, "A second synthetic answer.");
+  assert.deepEqual(selected.kind === "answer" && selected.sourceRefs, [{ startLine: 7, endLine: 8 }]);
+});
+
+test("append-only topic membership preserves source-order ordinals without chronology inference", async () => {
+  const appended = {
+    id: "synthetic-workplace-delta",
+    topic: "Workplace delta record",
+    tags: ["workplace", "synthetic"],
+    answer: "A synthetic fixture records the appended workplace.",
+    axis: 6,
+  };
+  const controller = createRetrievalController(syntheticIndex([...WORKPLACE_CARDS, appended]));
+  const encoder = countingEncoder(axisVector(4));
+
+  await controller.ask(CONTEXT_QUESTION, encoder);
+  const appendedPosition = await controller.ask("fourth workplace", encoder);
+
+  assert.equal(appendedPosition.kind === "answer" && appendedPosition.cardId, appended.id);
+  assert.equal(encoder.calls, 1, "the source-order position resolves without inferring dates");
+});
+
+test("corrected topic and tag membership changes only the synthetic follow-up group", async () => {
+  const corrected: SyntheticCardSpec[] = [
+    { ...WORKPLACE_CARDS[0], topic: "Record alpha", tags: ["workplace"], axis: 3 },
+    { ...WORKPLACE_CARDS[1], topic: "Record excluded", tags: ["unrelated"], axis: 4 },
+    { ...WORKPLACE_CARDS[2], topic: "Record beta", tags: ["workplace"], axis: 5 },
+  ];
+  const controller = createRetrievalController(syntheticIndex(corrected));
+  const encoder = countingEncoder(axisVector(3));
+
+  await controller.ask("synthetic context", encoder);
+  const second = await controller.ask("second workplace", encoder);
+
+  assert.equal(second.kind === "answer" && second.cardId, WORKPLACE_CARDS[2].id);
+  assert.equal(encoder.calls, 1);
 });
 
 test("an empty question asks for a question instead of answering", async () => {
@@ -132,7 +190,8 @@ test("an empty question asks for a question instead of answering", async () => {
 });
 
 test("choosing an offered clarification needs no second inference", async () => {
-  const controller = createRetrievalController(tiedIndex());
+  const index = tiedIndex();
+  const controller = createRetrievalController(index);
   const encoder = countingEncoder(axisVector(0));
   const clarification = await controller.ask(COVERED_QUESTION, encoder);
 
@@ -149,6 +208,7 @@ test("choosing an offered clarification needs no second inference", async () => 
   assert.equal(chosen?.kind === "answer" && chosen.cardId, "synthetic-beta");
   assert.equal(chosen?.kind === "answer" && chosen.matching, "semantic");
   assert.equal(chosen?.kind === "answer" && chosen.answer, SYNTHETIC_CARDS[0].answer);
+  assert.deepEqual(chosen?.kind === "answer" && chosen.sourceRefs, index.cards[1].sourceRefs);
   assert.equal(encoder.calls, callsAfterClarification);
   assert.equal(controller.pendingChoices(), null);
 });
@@ -366,6 +426,10 @@ test("an ordinal follow-up picks the position of the discussed topic without emb
   assert.equal(second.kind === "answer" && second.weak, false);
   assert.equal(second.kind === "answer" && second.limitedCause, undefined);
   assert.equal(second.kind === "answer" && second.answer, WORKPLACE_CARDS[1].answer);
+  assert.deepEqual(
+    second.kind === "answer" && second.sourceRefs,
+    syntheticIndex(WORKPLACE_CARDS).cards[1].sourceRefs,
+  );
 
   const third = await controller.ask("third workplace", encoder);
   assert.equal(third.kind === "answer" && third.cardId, "synthetic-workplace-gamma");
@@ -466,4 +530,79 @@ test("a short question with no answered turn is embedded exactly as asked", asyn
   assert.equal(freshEncoder.calls, 1);
   assert.equal(freshEncoder.lengths[0], "second workplace".length);
   assert.equal(ordinal.kind === "answer" && ordinal.cardId, "synthetic-workplace-alpha");
+});
+
+
+test("resetConversation clears follow-up context, choices and delayed inference", async () => {
+  const controller = createRetrievalController(syntheticIndex());
+  await controller.ask(COVERED_QUESTION, null);
+  controller.resetConversation();
+  const queries: string[] = [];
+  await controller.ask("more", async (query) => { queries.push(query); return axisVector(0); });
+  assert.deepEqual(queries, ["more"], "a fresh chat never composes old topic context");
+  let release!: (vector: number[]) => void;
+  const pending = controller.ask(COVERED_QUESTION, () => new Promise((r) => { release = r; }));
+  controller.resetConversation();
+  release(axisVector(0));
+  assert.deepEqual(await pending, { kind: "superseded" });
+  assert.equal(controller.pendingChoices(), null);
+  queries.length = 0;
+  await controller.ask("more", async (query) => { queries.push(query); return axisVector(0); });
+  assert.deepEqual(queries, ["more"], "late inference cannot restore context after reset");
+});
+
+test("starter topics sample three distinct reviewed choices once, with no scores or inferred answer", () => {
+  const index = syntheticIndex([...SYNTHETIC_CARDS, ...WORKPLACE_CARDS]);
+  let draws = 0;
+  const controller = createRetrievalController(index, () => { draws += 1; return 0.99; });
+  const choices = controller.offerStarters();
+  assert.deepEqual(choices, [
+    { cardId: "synthetic-workplace-gamma", topic: "Workplace gamma record" },
+    { cardId: "synthetic-workplace-beta", topic: "Workplace beta record" },
+    { cardId: "synthetic-workplace-alpha", topic: "Workplace alpha record" },
+  ]);
+  assert.strictEqual(controller.offerStarters(), choices);
+  assert.equal(draws, 3, "re-renders do not resample");
+  assert.equal(controller.pendingChoices(), null, "starters do not pretend to be scored clarification");
+  assert.equal(controller.chooseClarification("synthetic-calendar"), null, "a valid but unoffered id is rejected");
+  const picked = controller.chooseClarification("synthetic-workplace-beta");
+  assert.deepEqual(picked, {
+    kind: "answer", cardId: "synthetic-workplace-beta", topic: "Workplace beta record",
+    answer: "A synthetic fixture records the beta workplace.", matching: "semantic", weak: false,
+    sourceRefs: [{ startLine: 1, endLine: 2 }],
+  });
+  assert.equal(controller.chooseClarification("synthetic-workplace-beta"), null, "selection is single-use");
+  assert.deepEqual(controller.offerStarters(), []);
+  controller.resetConversation();
+  assert.equal(controller.offerStarters().length, 3);
+  assert.equal(draws, 6, "only New chat draws again");
+});
+
+test("starter topics handle empty, small and duplicate-topic reviewed indexes", () => {
+  assert.deepEqual(createRetrievalController(syntheticIndex([])).offerStarters(), []);
+  const cards = [SYNTHETIC_CARDS[0], { ...SYNTHETIC_CARDS[0], id: "duplicate-topic" }, SYNTHETIC_CARDS[1]];
+  const controller = createRetrievalController(syntheticIndex(cards), () => 0);
+  assert.deepEqual(controller.offerStarters(), [
+    { cardId: "synthetic-calendar", topic: "Synthetic calendar systems" },
+    { cardId: "synthetic-ledgers", topic: "Synthetic payment ledgers" },
+  ]);
+  assert.equal(controller.chooseClarification("duplicate-topic"), null);
+  controller.dismissStarters();
+  assert.equal(controller.chooseClarification("synthetic-calendar"), null);
+  assert.deepEqual(controller.offerStarters(), []);
+});
+
+test("a real question dismisses starters without replacing ordinary two-choice ambiguity", async () => {
+  const controller = createRetrievalController(tiedIndex(), () => 0);
+  controller.offerStarters();
+  const encoder = countingEncoder();
+  const result = await controller.ask(COVERED_QUESTION, encoder);
+  assert.equal(result.kind, "clarify");
+  assert.equal(controller.pendingChoices()?.length, 2);
+  const pending = controller.pendingChoices();
+  assert.deepEqual(controller.offerStarters(), []);
+  assert.strictEqual(controller.pendingChoices(), pending);
+  assert.equal(controller.chooseClarification("synthetic-gamma"), null);
+  assert.equal(controller.chooseClarification("synthetic-beta")?.kind, "answer");
+  assert.equal(encoder.calls, 1, "an offered pick does not embed again");
 });

@@ -4,8 +4,8 @@ import test from "node:test";
 import { mergeTranscript } from "../src/chat/transcript.ts";
 
 test("keeps a single phrase when the finalized line repeats the interim text", () => {
-  // Regression: Moonshine reports interim text and then the same finalized
-  // line, which used to appear twice in the question bubble.
+  // Regression: speech recognition reports interim text and then the same
+  // finalized line, which used to appear twice in the question bubble.
   const interim = "What does Deniss do at If";
   const finalized = "What does Deniss do at If?";
 
@@ -33,6 +33,27 @@ test("joins unrelated continuations once", () => {
     mergeTranscript("What are his skills", "and where did he work"),
     "What are his skills and where did he work",
   );
+});
+
+test("appends successive committed deltas without replacing earlier words", () => {
+  const first = mergeTranscript("", "I worked at If P&C");
+
+  assert.equal(mergeTranscript(first, "for four years"), "I worked at If P&C for four years");
+});
+
+test("removes repeated word overlap between committed deltas", () => {
+  assert.equal(
+    mergeTranscript("I worked at If P&C Insurance", "If P&C Insurance and Stream Labs"),
+    "I worked at If P&C Insurance and Stream Labs",
+  );
+});
+
+test("keeps a source word intact when overlap ends inside its normalized form", () => {
+  assert.equal(mergeTranscript("I use P", "P&C Insurance"), "I use P&C Insurance");
+});
+
+test("preserves punctuation at an overlap boundary", () => {
+  assert.equal(mergeTranscript("I said hello", "hello, world"), "I said hello, world");
 });
 
 test("ignores empty input on either side", () => {

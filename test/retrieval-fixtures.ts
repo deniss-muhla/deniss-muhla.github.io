@@ -17,6 +17,8 @@ export interface SyntheticCardSpec {
   topic: string;
   tags: string[];
   answer: string;
+  /** Optional reviewed equivalence metadata, exercised only with synthetic cards. */
+  variantGroup?: string;
   /** Axis index the stored vector points at, so a query on that axis scores exactly 1. */
   axis: number;
 }
@@ -94,6 +96,7 @@ export function syntheticArtifact(cards: SyntheticCardSpec[] = SYNTHETIC_CARDS):
       sourceRefs: [{ startLine: 1, endLine: 2 }],
       answer: card.answer,
       vector: axisVector(card.axis),
+      ...(card.variantGroup === undefined ? {} : { variantGroup: card.variantGroup }),
     })),
   };
 }

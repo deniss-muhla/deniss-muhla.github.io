@@ -15,7 +15,7 @@
  * The route is site-absolute, which assumes the site is served from the domain root.
  */
 
-/** Same-origin route for the runtime files, mirroring the Moonshine runtime route. */
+/** Same-origin route for the runtime files, one of the project-owned static runtime routes. */
 export const ORT_ROUTE = "/ort/";
 
 export const ORT_PACKAGE = "onnxruntime-web";

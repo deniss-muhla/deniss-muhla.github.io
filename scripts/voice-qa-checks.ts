@@ -31,6 +31,27 @@ export function selectQaMode(argv: readonly string[]): VoiceQaMode {
   return mode;
 }
 
+export type QaVoiceConsentChoice = "typed" | "live";
+
+/**
+ * Chooses the application's explicit mode from the requested QA workload.
+ * A default/typed-only run must never grant microphone permission or enter live voice.
+ *
+ * @param fakeMicrophoneRequested whether this run explicitly supplied a fake input WAV
+ * @returns the UI choice the runner must select after opening the panel
+ */
+export function qaVoiceConsentChoice(fakeMicrophoneRequested: boolean): QaVoiceConsentChoice {
+  return fakeMicrophoneRequested ? "live" : "typed";
+}
+
+/** The validated finite-playback Chromium switch used by real fake-mic QA workloads. */
+export function qaFiniteFakeAudioCaptureArg(wavPath: string): string {
+  if (wavPath.length === 0 || wavPath.includes("\0")) {
+    throw new Error("invalid-fake-audio-capture-path");
+  }
+  return `--use-file-for-fake-audio-capture=${wavPath}%noloop`;
+}
+
 /**
  * The terminal line `scripts/voice-qa.mjs` prints after its own workload.
  *

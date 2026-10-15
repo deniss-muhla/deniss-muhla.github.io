@@ -1,8 +1,8 @@
 import react from "@vitejs/plugin-react";
-import { createReadStream, existsSync, readdirSync, readFileSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { dirname, extname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { extname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { defineConfig, type Plugin } from "vite";
 
 import {
@@ -12,6 +12,7 @@ import {
   ORT_RUNTIME_VERSION,
 } from "./src/chat/retrieval/encoder/runtime-assets.ts";
 import { MODEL_ASSETS_CACHE, MODEL_ASSET_SETS } from "./scripts/model-assets.mjs";
+import { createAudioSourceInventory } from "./scripts/cv-audio/catalog.mjs";
 
 type CvPipelineModule = {
   ensureCvArtifacts: () => Promise<void>;
@@ -23,109 +24,6 @@ export const crossOriginIsolationHeaders = {
 };
 
 /**
- * Moonshine browser runtime, served as static files instead of being bundled.
- *
- * Minifying the upstream Emscripten and streaming code makes speech recognition
- * fail silently (audio is captured, no transcript is produced), so the runtime
- * must ship unmodified. Serving it from a URL also keeps the 13 MB WASM out of
- * the JS graph and gives the service worker plain same-origin files to cache.
- *
- * The runtime cannot live in `public/`: Vite refuses to load `public/` URLs from
- * source code. This plugin serves the package's `dist/` directory at
- * `/moonshine/` during development and emits the same files into the build
- * output, so the runtime URL is identical in dev, preview and production.
- */
-const MOONSHINE_ROUTE = "/moonshine/";
-
-const moonshineContentTypes: Record<string, string> = {
-  ".js": "text/javascript; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".wasm": "application/wasm",
-  ".json": "application/json",
-};
-
-function resolveMoonshineDist(): string {
-  const candidates: string[] = [];
-
-  try {
-    candidates.push(dirname(fileURLToPath(import.meta.resolve("@moonshine-ai/moonshine-wasm"))));
-  } catch {
-    // The package only declares an "import" condition; fall back to the layout.
-  }
-
-  candidates.push(resolve(process.cwd(), "node_modules", "@moonshine-ai", "moonshine-wasm", "dist"));
-
-  const found = candidates.find((candidate) => existsSync(join(candidate, "index.js")));
-  if (!found) {
-    throw new Error(
-      `[moonshine-runtime] could not locate the Moonshine runtime. Checked: ${candidates.join(", ")}`,
-    );
-  }
-  return found;
-}
-
-function listMoonshineFiles(distDir: string): string[] {
-  return readdirSync(distDir).filter(
-    (name) => !name.endsWith(".map") && !name.endsWith(".d.ts") && !name.endsWith(".d.cts"),
-  );
-}
-
-function moonshineRuntimeServePlugin(): Plugin {
-  const distDir = resolveMoonshineDist();
-
-  return {
-    name: "moonshine-runtime-serve",
-    apply: "serve",
-
-    configureServer(server) {
-      server.middlewares.use((request, response, next) => {
-        const pathname = (request.url ?? "").split("?")[0];
-        if (!pathname.startsWith(MOONSHINE_ROUTE)) return next();
-
-        const name = pathname.slice(MOONSHINE_ROUTE.length);
-        if (!name || name.includes("/") || name.includes("..")) return next();
-
-        const file = join(distDir, name);
-        if (!existsSync(file)) return next();
-
-        response.setHeader(
-          "Content-Type",
-          moonshineContentTypes[extname(name)] ?? "application/octet-stream",
-        );
-        response.setHeader("Cache-Control", "no-cache");
-        // Same headers the service worker adds in production. Without them
-        // Chrome blocks the pthread worker scripts in a cross-origin isolated
-        // page with `coep-frame-resource-needs-coep-header`.
-        for (const [header, value] of Object.entries(crossOriginIsolationHeaders)) {
-          response.setHeader(header, value);
-        }
-        response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
-        createReadStream(file).pipe(response);
-      });
-    },
-  };
-}
-
-function moonshineRuntimeBuildPlugin(): Plugin {
-  const distDir = resolveMoonshineDist();
-
-  return {
-    name: "moonshine-runtime-build",
-    apply: "build",
-
-    async buildStart() {
-      for (const name of listMoonshineFiles(distDir)) {
-        this.emitFile({
-          type: "asset",
-          fileName: `moonshine/${name}`,
-          source: await readFile(join(distDir, name)),
-        });
-      }
-    },
-  };
-}
-
-/**
  * The pinned ONNX Runtime Web files, served as static files instead of from a CDN.
  *
  * The embedding runtime's own default is a third-party CDN URL carrying the locked runtime
@@ -133,9 +31,10 @@ function moonshineRuntimeBuildPlugin(): Plugin {
  * module names same-origin URLs instead and this route serves them from the installed
  * locked package.
  *
- * This is not the Moonshine rule copied onto an unrelated package. Moonshine ships
- * unminified because bundling it breaks speech recognition; here the two files are plain
- * static assets kept out of the JavaScript graph and out of the module worker's bundle.
+ * This is not the vendored-runtime rule copied onto an unrelated package. The Whistle
+ * speech runtime at `/models/cactus-needle/` ships byte-identical to its pinned source
+ * because a modified runtime would be an unaudited third-party change; here the two files
+ * are plain static assets kept out of the JavaScript graph and out of the worker's bundle.
  * Their digests are recorded in `runtime-assets.ts` and proven by the headed retrieval QA
  * run, not hashed on every start-up.
  *
@@ -231,17 +130,15 @@ function onnxRuntimeBuildPlugin(): Plugin {
 }
 
 /**
- * The self-hosted model and font assets: served from the external cache in development,
- * emitted into the build output.
+ * The self-hosted model and font assets are served from the external cache in development.
+ * Production emits the pinned retrieval, Whistle and font sets. The explicit Kitten stage
+ * command uses its external runtime inputs and never loads this site config.
  *
  * `scripts/model-assets.mjs` pins every file (route, bytes, sha256, source, license) and
  * `scripts/fetch-model-assets.mjs` keeps the verified bytes in
- * `~/.cache/cv-assistant/model-assets/`. These plugins only map a pinned route to that
- * cache file, so the embedding model, the Moonshine and Pocket TTS model weights, the
- * Pocket TTS ONNX Runtime files and the web fonts all load from this site's own origin in
- * development and in production, with the same header policy as the Moonshine and ONNX
- * runtime routes (isolation headers for worker scripts, `Cross-Origin-Resource-Policy:
- * same-origin`, no cache in development).
+ * `~/.cache/cv-assistant/model-assets/`. These plugins map a pinned route to that cache
+ * file and use the site's isolation header policy for worker scripts, with
+ * `Cross-Origin-Resource-Policy: same-origin` and no cache in development.
  *
  * A request is matched against the pinned route table, never joined from request text,
  * so a path outside the manifest cannot reach the filesystem. A missing cache file fails
@@ -262,6 +159,8 @@ for (const set of MODEL_ASSET_SETS) {
 
 const modelAssetContentTypes: Record<string, string> = {
   ".bin": "application/octet-stream",
+  ".cact": "application/octet-stream",
+  ".js": "text/javascript; charset=utf-8",
   ".json": "application/json",
   ".model": "application/octet-stream",
   ".mjs": "text/javascript; charset=utf-8",
@@ -330,7 +229,29 @@ async function loadCvPipeline(): Promise<CvPipelineModule> {
   return (await import(moduleUrl)) as CvPipelineModule;
 }
 
+interface CvAudioSourceIdentity {
+  factsSha256: string;
+  greetingSha256: string;
+  catalogSha256: string;
+}
+
+function cvAudioSourceIdentity(): CvAudioSourceIdentity {
+  if (process.env.OFFLINE_CHAT_QA_ONLY === "1") {
+    throw new Error("The offline QA config must not read the CV audio source identity.");
+  }
+  const facts = readFileSync(resolve(import.meta.dirname, "resources/cv/facts.json"));
+  const inventory = createAudioSourceInventory(facts);
+  return {
+    factsSha256: inventory.factsSha256,
+    greetingSha256: inventory.greetingSha256,
+    catalogSha256: inventory.catalogSha256,
+  };
+}
+
 function cvArtifactsPlugin(): Plugin {
+  if (process.env.OFFLINE_CHAT_QA_ONLY === "1") {
+    throw new Error("The offline QA config must omit the CV artifact plugin before its factory call.");
+  }
   return {
     name: "cv-artifacts",
     async buildStart() {
@@ -350,22 +271,22 @@ function cvArtifactsPlugin(): Plugin {
   };
 }
 
-export default defineConfig({
+export default defineConfig(() => {
+  // The isolated offline QA harness sets this before loading config.
+  const offlineChatQaOnly = process.env.OFFLINE_CHAT_QA_ONLY === "1";
+
+  return {
+  define: offlineChatQaOnly
+    ? {}
+    : { __CV_AUDIO_SOURCE_IDENTITY__: JSON.stringify(cvAudioSourceIdentity()) },
   plugins: [
     react(),
-    cvArtifactsPlugin(),
-    moonshineRuntimeServePlugin(),
-    moonshineRuntimeBuildPlugin(),
+    ...(offlineChatQaOnly ? [] : [cvArtifactsPlugin()]),
     onnxRuntimeServePlugin(),
     onnxRuntimeBuildPlugin(),
     modelAssetsServePlugin(),
     modelAssetsBuildPlugin(),
   ],
-  // Pocket TTS resolves its worker and WASM assets at runtime; Vite's
-  // dependency optimizer would otherwise rewrite them to missing URLs.
-  optimizeDeps: {
-    exclude: ["pocket-tts-js"],
-  },
   // onnxruntime-web only exposes its non-bundled entry under this condition. The bundled
   // entry embeds its WASM URLs, so the build emits a 26 MB asyncify asset the page never
   // loads: the worker names the pinned jsep pair through ORT_WASM_PATHS instead, served
@@ -377,9 +298,10 @@ export default defineConfig({
   worker: {
     format: "es",
   },
-  // Cross-origin isolation is required by Moonshine's threaded WASM build.
-  // In production the service worker adds these headers to same-origin
-  // responses (public/sw.js); the dev and preview servers set them directly.
+  // Cross-origin isolation is the page's standing header policy: set here in dev and
+  // preview, and by the service worker in production (public/sw.js). Every shipped model
+  // runs single-threaded, so none of them needs `SharedArrayBuffer`; the headers stay a
+  // verified page-level guarantee rather than a model requirement.
   server: {
     headers: crossOriginIsolationHeaders,
   },
@@ -410,4 +332,5 @@ export default defineConfig({
       },
     },
   },
+  };
 });

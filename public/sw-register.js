@@ -2,7 +2,8 @@
  * Service worker registration + recovery reload for cross-origin isolation.
  *
  * The worker injects COOP/COEP headers, so only documents it serves become
- * `crossOriginIsolated` (needed by the threaded Moonshine WASM build).
+ * `crossOriginIsolated`, which is the page's standing header policy (no shipped
+ * model needs `SharedArrayBuffer`).
  * Two cases need a reload:
  *
  *  - the first controlled load (a worker has just been installed), and

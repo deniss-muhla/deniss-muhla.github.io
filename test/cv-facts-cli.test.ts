@@ -233,7 +233,7 @@ test("the package scripts map to the four commands and the skill documents the s
     assert.equal(manifest.scripts[script], expected[index], `${script} must map to ${expected[index]}`);
   });
 
-  const skill = fs.readFileSync(path.join(repositoryRoot, ".agents", "skills", "cv-facts", "SKILL.md"), "utf8");
+  const skill = fs.readFileSync(path.join(repositoryRoot, ".github", "skills", "cv-facts", "SKILL.md"), "utf8");
 
   for (const script of PACKAGE_SCRIPTS) assert.match(skill, new RegExp(`\`pnpm ${script}\\b`));
 
@@ -257,7 +257,7 @@ test("the package scripts map to the four commands and the skill documents the s
  * next to the example rather than assumed here.
  */
 test("every pnpm example in the skill is the working form this pnpm routes", () => {
-  const skill = fs.readFileSync(path.join(repositoryRoot, ".agents", "skills", "cv-facts", "SKILL.md"), "utf8");
+  const skill = fs.readFileSync(path.join(repositoryRoot, ".github", "skills", "cv-facts", "SKILL.md"), "utf8");
   const documentedFailure = "cv-facts/cli/unknown-option";
   const working: string[] = [];
   let failingExamples = 0;
@@ -442,7 +442,7 @@ test("both build scripts run the offline gate and stop before the bundler on a s
       assert.deepEqual(fs.readFileSync(to), fs.readFileSync(from), `${path.basename(from)} was not copied unchanged`);
     }
 
-    for (const stub of ["tsc", "vite"]) {
+    for (const stub of ["tsc", "cv-audio-check", "vite"]) {
       const stubPath = path.join(project, "bin", stub);
 
       fs.writeFileSync(stubPath, `#!/bin/sh\necho "${stub} ran" >> "$GATE_LOG"\nexit 0\n`, { mode: 0o755 });
@@ -489,6 +489,7 @@ test("both build scripts run the offline gate and stop before the bundler on a s
             build: manifest.scripts.build,
             "build:site": manifest.scripts["build:site"],
             "cv:facts:check": manifest.scripts["cv:facts:check"],
+            "cv:audio:check": "cv-audio-check",
           },
         },
         null,
@@ -497,8 +498,8 @@ test("both build scripts run the offline gate and stop before the bundler on a s
     );
 
     // The gate is only worth asserting if the wiring is the shipping wiring.
-    assert.equal(manifest.scripts.build, "tsc -b && pnpm cv:facts:check && vite build");
-    assert.equal(manifest.scripts["build:site"], "tsc -b && pnpm cv:facts:check && vite build");
+    assert.equal(manifest.scripts.build, "tsc -b && pnpm cv:facts:check && pnpm cv:audio:check && vite build");
+    assert.equal(manifest.scripts["build:site"], "tsc -b && pnpm cv:facts:check && pnpm cv:audio:check && vite build");
     assert.equal(manifest.scripts["cv:facts:check"], "node ./scripts/cv-facts.mjs check");
 
     for (const name of ["build", "build:site"]) {
@@ -506,7 +507,11 @@ test("both build scripts run the offline gate and stop before the bundler on a s
 
       assert.equal(passing.status, 0, passing.output);
       assert.match(passing.output, /check passed for 1 cards from the reviewed index/);
-      assert.deepEqual(passing.chain, ["tsc ran", "vite ran"], `${name} must run the gate between compile and bundle`);
+      assert.deepEqual(
+        passing.chain,
+        ["tsc ran", "cv-audio-check ran", "vite ran"],
+        `${name} must run both offline gates between compile and bundle`,
+      );
 
       // The fault is index level: the index no longer claims the digest of the file beside it.
       fs.writeFileSync(
@@ -525,7 +530,7 @@ test("both build scripts run the offline gate and stop before the bundler on a s
       const restored = runBuildScript(name);
 
       assert.equal(restored.status, 0, restored.output);
-      assert.deepEqual(restored.chain, ["tsc ran", "vite ran"]);
+      assert.deepEqual(restored.chain, ["tsc ran", "cv-audio-check ran", "vite ran"]);
     }
 
     // The regression value of the loop above, shown rather than asserted about. With the gate

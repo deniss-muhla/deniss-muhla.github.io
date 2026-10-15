@@ -8,10 +8,10 @@
  * every named case, so a constant that moves is a change the cases do not justify.
  *
  * The order below is the design's order and is not interchangeable. Refusal is checked
- * before the near-tie branch, so an exact tie below the relevance floor asks for a rephrase
- * instead of offering two choices the visitor did not earn. Only candidates that reach the
- * relevance floor are eligible competitors at all, so a clear card is never turned into a
- * clarification by a card that is merely nearby in the array.
+ * before the near-set branch, so an exact tie below the relevance floor asks for a rephrase
+ * instead of offering choices the visitor did not earn. Only candidates that reach the
+ * relevance floor are eligible. All close eligible ranks are inspected; only reviewed group
+ * members share one contender identity, and randomness is limited to such close members.
  */
 import type { Ranking, ScoredCard } from "./scoring.ts";
 
@@ -72,7 +72,7 @@ export const MAX_CLARIFICATION_CHOICES = 2;
 export type Selection =
   /** Nothing relevant. The visitor is asked to rephrase. */
   | { kind: "rephrase" }
-  /** Two eligible competitors within the margin. Only these card ids may be chosen. */
+  /** Two highest-ranked distinct eligible contenders within the margin. */
   | { kind: "clarify"; choices: ClarificationChoice[] }
   /** One selected card. `weak` adds the uncertainty cue outside the prepared answer. */
   | { kind: "answer"; cardId: string; score: number; weak: boolean };
@@ -85,27 +85,73 @@ export interface ClarificationChoice {
 
 /**
  * @param ranking the full ranked list from `rankCards`
+ * @param random injectable source in [0, 1], used only for close members of one reviewed group
  * @returns the branch decision; an empty list is a refusal, never an empty answer
  */
-export function selectAnswer(ranking: Ranking): Selection {
-  const scored = ranking.scored;
-  const best = scored[0];
+export function selectAnswer(ranking: Ranking, random: () => number = Math.random): Selection {
+  const best = ranking.scored[0];
 
   if (best === undefined) return { kind: "rephrase" };
   if (best.score < RELEVANCE_FLOOR) return { kind: "rephrase" };
 
-  const eligible = scored.filter((candidate) => candidate.score >= RELEVANCE_FLOOR);
-  const competitor = eligible[1];
+  const close = ranking.scored.filter(
+    (candidate) => candidate.score >= RELEVANCE_FLOOR && best.score - candidate.score < CONFIDENCE_MARGIN,
+  );
+  const contenders = distinctContenders(close);
 
-  if (competitor !== undefined && best.score - competitor.score < CONFIDENCE_MARGIN) {
+  if (contenders.length > 1) {
     return {
       kind: "clarify",
-      choices: [toChoice(best), toChoice(competitor)].slice(0, MAX_CLARIFICATION_CHOICES),
+      choices: contenders.slice(0, MAX_CLARIFICATION_CHOICES).map(toChoice),
     };
   }
 
-  // An ineligible runner-up is not a near competitor, so a confident card is answered as is.
-  return { kind: "answer", cardId: best.id, score: best.score, weak: best.score < CONFIDENCE };
+  const onlyGroup = close[0]?.variantGroup;
+  if (onlyGroup !== undefined && close.length > 1) {
+    const selected = close[Math.min(Math.floor(readRandom(random) * close.length), close.length - 1)];
+    return answerSelection(selected);
+  }
+
+  // A non-close variant, a singleton group member, or an ungrouped card stays deterministic.
+  return answerSelection(best);
+}
+
+function contenderKey(candidate: ScoredCard): string {
+  return JSON.stringify(candidate.variantGroup === undefined
+    ? ["card", candidate.id]
+    : ["group", candidate.variantGroup]);
+}
+
+/** One highest-ranked representative per distinct card or reviewed group, in score order. */
+function distinctContenders(close: readonly ScoredCard[]): ScoredCard[] {
+  const seen = new Set<string>();
+  const contenders: ScoredCard[] = [];
+
+  for (const candidate of close) {
+    const key = contenderKey(candidate);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    contenders.push(candidate);
+  }
+
+  return contenders;
+}
+
+function readRandom(random: () => number): number {
+  const value = random();
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new RangeError("selection random source must return a finite value from 0 through 1");
+  }
+  return value;
+}
+
+function answerSelection(candidate: ScoredCard): Selection {
+  return {
+    kind: "answer",
+    cardId: candidate.id,
+    score: candidate.score,
+    weak: candidate.score < CONFIDENCE,
+  };
 }
 
 function toChoice(candidate: ScoredCard): ClarificationChoice {

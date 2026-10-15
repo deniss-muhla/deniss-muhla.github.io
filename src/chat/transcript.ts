@@ -1,10 +1,9 @@
 /**
  * Speech transcript composition for the question bubble.
  *
- * Moonshine reports interim text for the line being spoken and then reports the
- * same text again as a finalized line, and it can split one utterance into
- * several lines at natural pauses. Concatenating those events directly
- * duplicates phrases in the chat, so merging checks for exact, prefix and
+ * Speech recognition reports the words the engine has committed and, separately, the tail
+ * it has not confirmed yet, and it can repeat a phrase across both. Concatenating those
+ * events directly duplicates phrases in the chat, so merging checks for exact, prefix and
  * word-level overlap before appending.
  */
 export function mergeTranscript(committed: string, incoming: string): string {
@@ -28,11 +27,30 @@ export function mergeTranscript(committed: string, incoming: string): string {
   for (let size = maxOverlap; size > 0; size -= 1) {
     if (leftWords.slice(-size).join(" ") !== rightWords.slice(0, size).join(" ")) continue;
 
-    const remainder = right.split(/\s+/).slice(size).join(" ").trim();
-    return remainder ? `${left} ${remainder}` : left;
+    const remainder = remainderAfterNormalizedWords(right, size);
+    if (!remainder.trim()) return left;
+    return /^\s/u.test(remainder)
+      ? `${left} ${remainder.trimStart()}`
+      : `${left}${remainder}`;
   }
 
   return `${left} ${right}`;
+}
+
+function remainderAfterNormalizedWords(text: string, count: number): string {
+  let consumedTokens = 0;
+  let sourceEnd = 0;
+
+  // Track source runs rather than whitespace words: punctuation can split one word into
+  // multiple normalized tokens, and the suffix may need to begin inside that word.
+  for (const match of text.matchAll(/[\p{L}\p{N}]+/gu)) {
+    const tokenCount = normalize(match[0]).split(" ").filter(Boolean).length;
+    consumedTokens += tokenCount;
+    sourceEnd = match.index + match[0].length;
+    if (consumedTokens >= count) break;
+  }
+
+  return text.slice(sourceEnd);
 }
 
 function normalize(text: string): string {

@@ -1,11 +1,10 @@
 /**
- * The pinned inventory of third-party runtime assets this site serves itself.
+ * The pinned inventory of third-party runtime and local-generator assets this site serves.
  *
- * Every file the page used to reach a vendor for at runtime is listed here with its
- * same-origin route, exact byte count, sha256, source URL and license. The Vite
- * `model-assets-*` and `fonts-*` plugins serve and emit exactly these files,
- * `fetch-model-assets.mjs` downloads them into the external cache and refuses a byte
- * that does not match, and the QA harness locks the offline scope to these routes.
+ * Every external model or font file is listed with its same-origin route, exact byte count,
+ * sha256, source URL and license. Vite serves the pinned retrieval, Whistle and font sets in
+ * development and production. `fetch-model-assets.mjs` downloads verified bytes into the
+ * external cache and refuses a byte that does not match.
  *
  * The cache lives outside the repository (`~/.cache/cv-assistant/model-assets/<id>/<rev>/`)
  * and the emitted copies live only in `dist/`; no asset in this manifest may enter git.
@@ -49,48 +48,25 @@ export const MODEL_ASSET_SETS = Object.freeze([
     ],
   },
   {
-    id: "moonshine-small-streaming-en",
-    rev: "quantized_26_07_30",
-    route: "/models/moonshine/small-streaming-en/quantized_26_07_30/",
-    source: "https://download.moonshine.ai/model/small-streaming-en/quantized_26_07_30",
-    license: "MIT",
+    id: "cactus-whistle-en",
+    rev: "b358ddadd89b7a713b5aa131f23032d3cca1b251",
+    route: "/models/cactus-needle/whistle/",
+    source: "https://huggingface.co/Cactus-Compute/whistle/resolve/b358ddadd89b7a713b5aa131f23032d3cca1b251",
+    license: "Apache-2.0",
     files: [
-      { name: "adapter.ort", bytes: 2870368, sha256: "c665f742364febad597cc9ac1e0b341ffbee0e24a1466e2f3bde95e6e4771762" },
-      { name: "cross_kv.ort", bytes: 5356536, sha256: "e2d3417144e9514055ebfefe8dcc4c0a55a55adcb8530435844c75c53e352bf6" },
-      { name: "decoder_kv.ort", bytes: 81878600, sha256: "1a05465b1dd955858dfcbee039c0020fb5dd982b0f5094c34e61735d518d771b" },
-      { name: "encoder.ort", bytes: 44148576, sha256: "2d4d973e91e8aca08c51e7e7efa28a46ab265b63d809d5294d18b86bcd85b993" },
-      { name: "frontend.ort", bytes: 30984520, sha256: "d1be8145bc9ef3e8625bb7bcb7a5b2930eeb828c91d6c1897bc215d7de6f2b93" },
-      { name: "streaming_config.json", bytes: 512, sha256: "26f02b6afb22d60871a5efd85c3d38e569cc0ddb6c5eb6e93d3260152ae8a47a" },
-      { name: "tokenizer.bin", bytes: 249974, sha256: "6884b35fd6377d4c4d32336a0bc152f36b64d1e45b6503683cdc238250a8472d" },
+      { name: "whistle.cact", bytes: 16_919_407, sha256: "b6e02f048568ac5d01a2042556c658061e699acbc0aa2a1439f52f3d461dffeb" },
     ],
   },
   {
-    id: "pocket-tts-onnx",
-    rev: "c469236dbc5f68287fa2fbf175b66de3b80123af",
-    route: "/models/pocket-tts/onnx/english_2026-04/",
+    id: "cactus-needle-wasm",
+    rev: "2ae11323dc000f5e70c49f7403efa6af12ba9e67",
+    route: "/models/cactus-needle/wasm/",
     source:
-      "https://huggingface.co/vlapky/pocket-tts-onnx/resolve/c469236dbc5f68287fa2fbf175b66de3b80123af/onnx/english_2026-04",
-    license: "CC-BY-4.0",
+      "https://huggingface.co/Cactus-Compute/needle3/resolve/2ae11323dc000f5e70c49f7403efa6af12ba9e67/wasm",
+    license: "Apache-2.0",
     files: [
-      { name: "bundle.json", bytes: 24381, sha256: "bab643150f437f37df080a710520ff39ed9ebd9a339f8ebdc739f7eddfc28b3f" },
-      { name: "tokenizer.model", bytes: 59339, sha256: "d461765ae179566678c93091c5fa6f2984c31bbe990bf1aa62d92c64d91bc3f6" },
-      { name: "text_conditioner_int8.onnx", bytes: 16388384, sha256: "24c0642bff11a4e1435c004d0c2aa6c68e093fadfa35f0f0dba849ac67f25ac3" },
-      { name: "flow_lm_main_int8.onnx", bytes: 76341079, sha256: "f9bd8106b79a0192c1c43399ab938fb24900a95c1c599870d75a884e99000116" },
-      { name: "flow_lm_flow_int8.onnx", bytes: 9962530, sha256: "3dd781ee5abee9e195320bf0106bebd6372a852b3b36352524ee78b40554635d" },
-      { name: "mimi_decoder_int8.onnx", bytes: 22684077, sha256: "3630450a3297a101792a6ac66619ebc70ab916b265e6220c2afaef8b1673f925" },
-      { name: "voices.bin", bytes: 52401928, sha256: "044364b05514d99f72c63830b0675951137c36f836e1e71bb2546e59b8c6d625" },
-    ],
-  },
-  {
-    id: "onnxruntime-web",
-    rev: "1.20.0",
-    route: "/models/onnxruntime-web/1.20.0/",
-    source: "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.0/dist",
-    license: "MIT",
-    files: [
-      { name: "ort.min.mjs", bytes: 446164, sha256: "139580c307255a1db2a068de5a03b1f9a954174695ac07754916c5fbb5c3f4ed" },
-      { name: "ort-wasm-simd-threaded.mjs", bytes: 24618, sha256: "b58de73c7b47b86290578489c6b5b16ade5d237cd5f340f0776a219bb833bd04" },
-      { name: "ort-wasm-simd-threaded.wasm", bytes: 11241642, sha256: "704f51767fe3e11443aac6b5509c8654688e4cea3d988f96a069390b6eccbabc" },
+      { name: "needle.js", bytes: 63_072, sha256: "964681b2a5ec3c4db2f06e45a5b60c8981a7d4ab4cac16ef6bf5b1988657a5f1" },
+      { name: "needle.wasm", bytes: 923_348, sha256: "c43f48e11f302087250d1e406024956781cd2f02595a5e343b3d7ddd5ef707fa" },
     ],
   },
   {

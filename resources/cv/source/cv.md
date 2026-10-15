@@ -1,21 +1,24 @@
 # Deniss Muhla
 
-Senior Front-end Engineer  
-Latvia, EU  
-Email: [deniss.muhla@gmail.com](mailto:deniss.muhla@gmail.com)  
-Phone / WhatsApp: +371 29966072
-
-> Front-end engineer focused on design systems, Web Components, scalable UI architecture, and practical AI-assisted engineering workflows. I bring more than 19 years of software engineering experience across European and North-American products, with hands-on depth in JavaScript, TypeScript, React, and C#.
+Senior Front-end Engineer | React & TypeScript\
+Latvia, EU\
+Email: [deniss.muhla@gmail.com](mailto:deniss.muhla@gmail.com)\
+Phone / WhatsApp: +371 29966072\
+[GitHub](https://github.com/deniss-muhla) | [LinkedIn](https://www.linkedin.com/in/deniss-muhla-b0241285/)
 
 ## Profile
 
-I work best where product delivery, component architecture, and developer experience meet. I enjoy turning ambiguous UI systems into maintainable foundations, aligning teams around shared patterns, and keeping implementation quality high without slowing down delivery.
+Senior front-end engineer with extensive software engineering experience across European and North American products. I build and maintain web applications with React, TypeScript, and JavaScript, combining hands-on development with UI architecture, reusable components, and technical leadership.
 
-## Current Focus
+Alongside product development, I help teams adopt AI-assisted development workflows by customising coding-agent behaviour and creating reusable skills for consistent implementation. I am interested in senior front-end roles building AI-enabled products or developer tools.
 
-- Design systems built around atomic, modular and accessible components with clear adoption paths.
-- React, TypeScript, Web Components, and Vite-based front-end platforms.
-- MCP, agent skills, and structured LLM context orchestration for real engineering workflows; acting as an innovation driver for agentic coding inside the team, including creating reusable skills for design-system scaffolding and integration.
+## Core Expertise
+
+- React and TypeScript application development, reusable components, and maintainable UI architecture.
+- Design-system integration, Web Components, and cross-team collaboration.
+- Browser performance, automated testing, and dependable delivery.
+- AI-assisted coding, coding-agent customisation, and reusable project-specific agent skills.
+- Hands-on technical leadership, architecture decisions, and delivery under constraints.
 
 ## Experience
 
@@ -23,12 +26,12 @@ I work best where product delivery, component architecture, and developer experi
 
 IF delivers P&C insurance solutions across Scandinavia and the Baltics. I work across customer-facing applications connected by a shared design system.
 
-- Implemented and maintained design-system driven UI across multiple software products.
-- Worked in ad hoc cross-team collaborations to collect consumer feedback and turn it into actionable system improvements.
-- Contributed to architectural discussions that challenged default design-system approaches so they could support products with different tech stacks and different levels of adoption.
-- Helped evaluate trade-offs across implementation options, adoption paths, release expectations, and QA impact to keep decisions practical and maintainable.
+- Implemented and maintained reusable UI components and design-system integrations across multiple customer-facing applications.
+- Collaborated with product teams to turn integration feedback into shared component improvements.
+- Evaluated component architecture and adoption trade-offs across products with different technology stacks and release requirements.
 - Advocated for atomic, modular components to keep the system adaptable and reduce product-specific bloat.
-- Explored agentic coding practices and created reusable skills for design-system scaffolding and integration to accelerate consistent implementation.
+- Help improve the team's development workflow by customising coding agents to follow project conventions and support everyday engineering tasks.
+- Create specialised, reusable agent skills that help other teams use the company's design-system components and artifacts efficiently and consistently.
 
 **Stack:** JavaScript, TypeScript, React, Web Components, Docker, Cypress, Vite, Azure DevOps, BrowserStack
 
@@ -36,12 +39,11 @@ IF delivers P&C insurance solutions across Scandinavia and the Baltics. I work a
 
 Stream Labs built products around video and audio content delivery, including archive navigation and large portal experiences.
 
-- Led front-end work across multiple projects while also contributing hands-on to critical features.
-- Selected React as the core front-end technology for maintainability, hiring, and delivery speed.
-- Delivered major milestones for the MultiProbe government project under tight schedules.
-- Improved archive browsing UX by designing a high-performance thumbnail navigation component based on sprite sheets, browser caching, and native CSS/browser capabilities.
+- Led hands-on front-end development for video and audio products, including the MultiProbe web portal.
+- Selected and implemented React as the core front-end technology and helped recruit developers.
+- Delivered MultiProbe milestones under tight schedules, taking the project into maintenance.
+- Built thumbnail navigation for large video archives using sprite sheets, browser caching, and native CSS to provide smoother browsing.
 - Drove architecture, task prioritisation, and team execution as both tech lead and team lead.
-- Learned to shape module structure around business logic, keep data entities strictly typed, and use functional tests to control regressions.
 
 **Stack:** JavaScript, TypeScript, C#, React, Redux, redux-saga, Next.js, MS SQL, Docker, Cypress, GitLab, Jira
 
@@ -63,45 +65,20 @@ Stream Labs built products around video and audio content delivery, including ar
 
 **Stack:** C#, JavaScript, Jira
 
-## Strengths
-
-- Architecture design
-- Design system thinking
-- Technical leadership
-- Delivery under constraints
-- Cross-team communication
-- Fast learner
-
 ## Technology Stack
 
-| Area                    | Level        |
-| ----------------------- | ------------ |
-| HTML / CSS              | Advanced     |
-| JavaScript / TypeScript | Advanced     |
-| React                   | Advanced     |
-| Node.js                 | Advanced     |
-| C# / .NET Framework     | Advanced     |
-| Package managers        | Advanced     |
-| Lit                     | Advanced     |
-| Web Components          | Advanced     |
-| GitHub Copilot          | Advanced     |
-| Next.js                 | Intermediate |
-| BrowserStack            | Intermediate |
-| Cypress                 | Intermediate |
-| Docker                  | Intermediate |
-| SQL                     | Intermediate |
-| Git                     | Intermediate |
-| GitLab                  | Intermediate |
-| Azure DevOps            | Intermediate |
-| Vite                    | Intermediate |
+| Area                    | Technologies and practices                                                                                                             |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Front-end               | React, TypeScript, JavaScript, HTML, CSS, Next.js                                                                                      |
+| UI architecture         | Reusable components, design systems, Web Components, Lit                                                                               |
+| Testing and delivery    | Cypress, BrowserStack, Vite, Docker, Git, GitLab, Azure DevOps                                                                         |
+| Development tooling     | Node.js, npm, pnpm, bun                                                                                                                |
+| AI-assisted engineering | GitHub Copilot, coding-agent customisation, reusable agent skills; current exploration of MCP and structured LLM context orchestration |
+| Additional background   | C# / .NET Framework, SQL                                                                                                               |
 
 ## Language
 
-- IELTS General Training, overall band 7.5 (26 July 2023)
-- Listening 7.0
-- Reading 9.0
-- Writing 6.0
-- Speaking 7.0
+- English — professional working proficiency; IELTS General Training, overall band 7.5 (26 July 2023).
 
 ## Certificates
 

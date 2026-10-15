@@ -15,6 +15,7 @@ import {
   describeReply,
   MODEL_STORAGE_CLEARED_NOTICE,
 } from "../src/chat/replies.ts";
+import { AUDIO_CATALOG_TEXT } from "../src/chat/audio-catalog.ts";
 import { WEAK_MATCH_CUE, type Answer } from "../src/chat/retrieval/controller.ts";
 
 type AnswerResult = Extract<Answer, { kind: "answer" }>;
@@ -39,6 +40,7 @@ test("a weak match keeps the uncertainty cue outside the answer text", () => {
   const view = describeReply(answerResult({ weak: true }));
 
   assert.deepEqual(view, { kind: "answer", note: WEAK_MATCH_CUE });
+  assert.equal(AUDIO_CATALOG_TEXT.weakMatchNote, WEAK_MATCH_CUE);
 });
 
 test("a limited answer labels which matching was available and why", () => {
@@ -50,9 +52,9 @@ test("a limited answer labels which matching was available and why", () => {
   );
 
   assert.equal(unloaded.kind, "answer");
-  assert.equal(unloaded.kind === "answer" && unloaded.note?.includes("not loaded"), true);
+  assert.equal(unloaded.kind === "answer" && unloaded.note, AUDIO_CATALOG_TEXT.limitedAnswerModelUnavailable);
   assert.equal(failed.kind, "answer");
-  assert.equal(failed.kind === "answer" && failed.note?.includes("failed to load"), true);
+  assert.equal(failed.kind === "answer" && failed.note, AUDIO_CATALOG_TEXT.limitedAnswerEmbeddingFailed);
 });
 
 test("a clarification offers a prompt for the engine's choices", () => {
@@ -95,6 +97,30 @@ test("an empty question asks for a question and offers no retry", () => {
 test("cancelled and superseded results leave no trace", () => {
   assert.deepEqual(describeReply({ kind: "cancelled" }), { kind: "none" });
   assert.deepEqual(describeReply({ kind: "superseded" }), { kind: "none" });
+});
+
+test("every fixed assistant reply uses the matching finite catalog text", () => {
+  const views = [
+    describeReply({ kind: "clarify", choices: [] }),
+    describeReply({ kind: "rephrase", matching: "semantic" }),
+    describeReply({ kind: "rephrase", matching: "limited", limitedCause: "model-unavailable" }),
+    describeReply({ kind: "rephrase", matching: "limited", limitedCause: "embedding-failed" }),
+    describeReply({ kind: "shorten", reason: "query/too-long" }),
+    describeReply({ kind: "ask-question" }),
+  ];
+
+  assert.deepEqual(views.map((view) => view.kind === "choices" ? view.prompt : view.kind === "notice" ? view.text : null), [
+    AUDIO_CATALOG_TEXT.clarifyPrompt,
+    AUDIO_CATALOG_TEXT.rephrase,
+    AUDIO_CATALOG_TEXT.limitedRephraseModelUnavailable,
+    AUDIO_CATALOG_TEXT.limitedRephraseEmbeddingFailed,
+    AUDIO_CATALOG_TEXT.shorten,
+    AUDIO_CATALOG_TEXT.askQuestion,
+  ]);
+  assert.equal(
+    (Object.values(AUDIO_CATALOG_TEXT) as readonly string[]).includes(MODEL_STORAGE_CLEARED_NOTICE),
+    false,
+  );
 });
 
 test("the storage-cleared notice names the cause and the reload", () => {

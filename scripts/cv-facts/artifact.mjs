@@ -37,6 +37,7 @@ const ARTIFACT_KEYS = ["version", "source", "embedding", "cards"];
 const SOURCE_KEYS = ["path", "sha256"];
 const EMBEDDING_KEYS = [...Object.keys(PINNED_EMBEDDING), "contentSha256"];
 const CARD_KEYS = ["id", "topic", "tags", "sourceRefs", "answer", "vector"];
+const VARIANT_GROUP = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const SOURCE_REF_KEYS = ["startLine", "endLine"];
 
 /** Retrieval text v1. The query path embeds bare trimmed text against exactly this string. */
@@ -45,14 +46,22 @@ export function retrievalText(card) {
 }
 
 /**
- * Digest over the ordered id, topic, tags and answer text. The cards are hashed as ordered
- * JSON tuples, so a field value cannot forge a field, an array or a record boundary: two tags
- * `["a","b"]` and the single tag `"a<separator>b"` are different arrays and hash
- * differently, even though retrieval text v1 joins both to the same query string. Source drift
- * and card drift stay distinguishable because the source digest is a separate field.
+ * Digest over ordered card text and, when present, reviewed equivalence metadata. Ungrouped
+ * v1 artifacts retain their original tuple shape so the current reviewed index remains valid;
+ * any grouped artifact uses a fifth nullable field on every tuple, binding both group names
+ * and ungrouped membership. Retrieval text remains topic, tags and answer only.
+ *
+ * The cards are hashed as ordered JSON tuples, so a field value cannot forge a field, an array
+ * or a record boundary: two tags `["a","b"]` and the single tag `"a<separator>b"` are
+ * different arrays, even though retrieval text v1 joins both to the same query string. Source
+ * drift and card drift stay distinguishable because the source digest is a separate field.
  */
 export function contentSha256(cards) {
-  const records = cards.map((card) => [card.id, card.topic, card.tags, card.answer]);
+  const hasVariantGroups = cards.some((card) => card.variantGroup !== undefined);
+  const records = cards.map((card) => {
+    const text = [card.id, card.topic, card.tags, card.answer];
+    return hasVariantGroups ? [...text, card.variantGroup ?? null] : text;
+  });
 
   return createHash("sha256").update(JSON.stringify([INPUT_VERSION, records]), "utf8").digest("hex");
 }
@@ -171,6 +180,7 @@ export function validateArtifact(artifact, context) {
 
   const dimensions = expectedIdentity.dimensions;
   const seenIds = new Set();
+  const variantGroupCounts = new Map();
   let cardsReadable = true;
 
   for (const [index, card] of artifact.cards.entries()) {
@@ -188,7 +198,10 @@ export function validateArtifact(artifact, context) {
     const coordinates = safeCoordinates(card.sourceRefs);
     const where = { card: at, cardId, coordinates };
 
-    if (!hasExactKeys(card, CARD_KEYS)) findings.push(finding("card/keys", where));
+    const hasVariantGroup = Object.hasOwn(card, "variantGroup");
+    const cardKeys = hasVariantGroup ? [...CARD_KEYS, "variantGroup"] : CARD_KEYS;
+
+    if (!hasExactKeys(card, cardKeys)) findings.push(finding("card/keys", where));
 
     if (cardId === null) findings.push(finding("card/id", where));
     else if (seenIds.has(card.id)) findings.push(finding("card/id-duplicate", where));
@@ -196,6 +209,15 @@ export function validateArtifact(artifact, context) {
 
     if (!isNonEmptyString(card.topic)) findings.push(finding("card/topic", where));
     if (!isNonEmptyString(card.answer)) findings.push(finding("card/answer", where));
+
+    if (hasVariantGroup) {
+      if (typeof card.variantGroup !== "string" || !VARIANT_GROUP.test(card.variantGroup)) {
+        findings.push(finding("card/variant-group", where));
+        cardsReadable = false;
+      } else {
+        variantGroupCounts.set(card.variantGroup, (variantGroupCounts.get(card.variantGroup) ?? 0) + 1);
+      }
+    }
 
     if (!Array.isArray(card.tags) || card.tags.length === 0) {
       findings.push(finding("card/tags", where));
@@ -244,6 +266,10 @@ export function validateArtifact(artifact, context) {
     if (!card.vector.every(hasAtMostSixDecimals)) {
       findings.push(finding("card/vector-precision", where));
     }
+  }
+
+  for (const count of variantGroupCounts.values()) {
+    if (count < 2) findings.push(finding("card/variant-group-singleton", { card: "cards" }));
   }
 
   // The content digest is checked last so a malformed card cannot make the digest unreadable

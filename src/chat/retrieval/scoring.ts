@@ -15,6 +15,8 @@ export interface ScoredCard {
   topic: string;
   /** Cosine similarity in [-1, 1]. A threshold comparison, never a probability. */
   score: number;
+  /** Explicit reviewed equivalence metadata, kept out of the embedding input. */
+  variantGroup?: string;
 }
 
 /** A ranked candidate list plus the dimension both sides were compared in. */
@@ -65,9 +67,8 @@ function cosine(query: readonly number[], queryNorm: number, card: AnswerCard): 
 }
 
 /**
- * Descending score, then ascending card id. The id tie-break exists only so an exact tie
- * ranks the same way twice: two equally scored cards are a clarification, never an
- * arbitrary winner chosen by array order.
+ * Descending score, then ascending card id. The id tie-break exists only so equal scores
+ * rank reproducibly; selection applies reviewed equivalence metadata after scoring.
  */
 function compare(left: ScoredCard, right: ScoredCard): number {
   if (left.score !== right.score) return right.score - left.score;
@@ -89,6 +90,7 @@ export function rankCards(index: ReviewedIndex, queryVector: readonly number[]):
     id: card.id,
     topic: card.topic,
     score: cosine(queryVector, queryNorm, card),
+    ...(card.variantGroup === undefined ? {} : { variantGroup: card.variantGroup }),
   }));
 
   scored.sort(compare);

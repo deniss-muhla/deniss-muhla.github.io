@@ -123,7 +123,7 @@ export function smokeServerOptions(): InlineConfig {
     // Same worker format and dependency handling as the shipped dev server, so the
     // encoder worker and its library are served the way the app serves them.
     worker: { format: "es" },
-    optimizeDeps: { include: ["@huggingface/transformers"], exclude: ["pocket-tts-js"] },
+    optimizeDeps: { include: ["@huggingface/transformers"] },
     plugins: [
       // The page's encoder loads the pinned ONNX Runtime from the same route, plugin and
       // bytes the shipped server serves; nothing else may serve that runtime.

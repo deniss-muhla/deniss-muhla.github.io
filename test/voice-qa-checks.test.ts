@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   qaCompletedVoiceTurnSince,
+  qaFiniteFakeAudioCaptureArg,
   qaMatchLabel,
   qaMeteredPhase,
   qaModelsReady,
@@ -12,6 +13,7 @@ import {
   qaTurnSpeech,
   qaTypedOutcome,
   qaEntryTerminalLine,
+  qaVoiceConsentChoice,
   selectQaMode,
   type QaMeteredObservation,
   type QaMeteredPhase,
@@ -70,6 +72,36 @@ test("an unknown mode fails instead of quietly running the other workload", () =
   assert.throws(() => selectQaMode(["--qa="]), { message: /unknown-qa-mode:/ });
 });
 
+test("typed-only QA chooses silent mode without microphone permission; fake input requires the explicit live UI choice", () => {
+  assert.equal(qaVoiceConsentChoice(false), "typed");
+  assert.equal(qaVoiceConsentChoice(true), "live");
+
+  const script = readFileSync(new URL("../scripts/voice-qa.mjs", import.meta.url), "utf8");
+  assert.match(script, /qaVoiceConsentChoice\(Boolean\(VOICE_WAV\)\)/);
+  assert.doesNotMatch(script, /autoplay-policy=no-user-gesture-required/);
+  assert.doesNotMatch(script, /ownedBrowser\.newContext\(\{[\s\S]{0,180}permissions:/);
+
+  const open = script.indexOf('await page.getByTestId("voice-fab").click();');
+  const grant = script.indexOf('await context.grantPermissions(["microphone"]');
+  const liveChoice = script.indexOf('await page.getByTestId("voice-enable-live").click();');
+  const typedChoice = script.indexOf('await page.getByTestId("voice-choose-typed").click();');
+  assert.ok(open !== -1 && grant > open && liveChoice > grant, "fake permission setup is separate and precedes the live-choice gesture");
+  assert.ok(typedChoice > open, "the default workflow selects silent typed mode after opening");
+});
+
+test("fake WAV capture is finite and the existing voice runner uses the shared Chromium argument", () => {
+  assert.equal(
+    qaFiniteFakeAudioCaptureArg("/tmp/approved neutral.wav"),
+    "--use-file-for-fake-audio-capture=/tmp/approved neutral.wav%noloop",
+  );
+  assert.throws(() => qaFiniteFakeAudioCaptureArg(""), { message: "invalid-fake-audio-capture-path" });
+  assert.throws(() => qaFiniteFakeAudioCaptureArg("/tmp/bad\0path.wav"), { message: "invalid-fake-audio-capture-path" });
+
+  const script = readFileSync(new URL("../scripts/voice-qa.mjs", import.meta.url), "utf8");
+  assert.match(script, /qaFiniteFakeAudioCaptureArg\(VOICE_WAV\)/);
+  assert.doesNotMatch(script, /--use-file-for-fake-audio-capture=\$\{VOICE_WAV\}/);
+});
+
 test("the entry dispatches the requested workload and keeps the retrieval import out of the voice path", () => {
   const script = readFileSync(new URL("../scripts/voice-qa.mjs", import.meta.url), "utf8");
   assert.match(script, /selectQaMode\(process\.argv\.slice\(2\)\)/);
@@ -124,41 +156,37 @@ test("offline model readiness uses the closed-panel status before opening change
   assert.equal(qaModelsReady("Voice assistant unavailable."), false);
 });
 
-function qaOfflineReadinessPrecedesPanelOpen(script: string): boolean {
+function qaOfflineTypedReplayFlow(script: string): boolean {
   const offlineStart = script.indexOf("await context.setOffline(true);");
   const offlineEnd = script.indexOf("await context.setOffline(false);", offlineStart);
   if (offlineStart === -1 || offlineEnd === -1) return false;
 
-  const offlineWorkflow = script.slice(offlineStart, offlineEnd);
-  const reload = offlineWorkflow.indexOf("await page.reload(");
-  const readiness = offlineWorkflow.search(
-    /await waitFor\(async \(\) => (?:qaModelsReady\(await status\(\)\)|\(await status\(\)\)\.startsWith\("Ready"\)),/,
-  );
-  const panelReopen = offlineWorkflow.indexOf('await page.getByTestId("voice-fab").click();');
-  return reload !== -1 && readiness > reload && (panelReopen === -1 || readiness < panelReopen);
+  const workflow = script.slice(offlineStart, offlineEnd);
+  const reload = workflow.indexOf("await page.reload(");
+  const open = workflow.indexOf('await page.getByTestId("voice-fab").click();');
+  const chooseTyped = workflow.indexOf('await page.getByTestId("voice-choose-typed").click();');
+  const fill = workflow.indexOf('await page.getByTestId("voice-input").fill(question);');
+  const outcome = workflow.indexOf('const offlineOutcome = await waitForNewOutcome(');
+  const silentGuard = workflow.indexOf('throw new Error("offline-typed-answer-played-before-replay");');
+  const replay = workflow.indexOf('await page.getByTestId("voice-replay").last().click();');
+  return reload !== -1 && reload < open && open < chooseTyped && chooseTyped < fill
+    && fill < outcome && outcome < silentGuard && silentGuard < replay;
 }
 
-test("offline reload checks readiness before any panel reopen", () => {
-  const legacyReadyBeforePanelOpen = [
-    "await context.setOffline(true);",
-    "await page.reload();",
-    'await waitFor(async () => (await status()).startsWith("Ready"), 120_000, "offline models");',
-    'await page.getByTestId("voice-fab").click();',
-    "await context.setOffline(false);",
-  ].join("\n");
-  assert.equal(qaOfflineReadinessPrecedesPanelOpen(legacyReadyBeforePanelOpen), true);
-
-  const oldClickBeforeReadyOrder = [
+test("offline reload chooses silent typed mode and replays only after its typed answer", () => {
+  const legacyAutoplayFlow = [
     "await context.setOffline(true);",
     "await page.reload();",
     'await page.getByTestId("voice-fab").click();',
-    'await waitFor(async () => (await status()).startsWith("Ready"), 120_000, "offline models");',
+    'await page.getByTestId("voice-input").fill(question);',
+    'const offlineOutcome = await waitForNewOutcome(page);',
+    'await waitForTurnSettled("offline-answer-speech-settled");',
     "await context.setOffline(false);",
   ].join("\n");
-  assert.equal(qaOfflineReadinessPrecedesPanelOpen(oldClickBeforeReadyOrder), false);
+  assert.equal(qaOfflineTypedReplayFlow(legacyAutoplayFlow), false);
 
   const script = readFileSync(new URL("../scripts/voice-qa.mjs", import.meta.url), "utf8");
-  assert.equal(qaOfflineReadinessPrecedesPanelOpen(script), true);
+  assert.equal(qaOfflineTypedReplayFlow(script), true);
 });
 
 test("typed-only history before microphone activation cannot satisfy a voice check", () => {

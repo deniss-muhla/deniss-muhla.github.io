@@ -1,26 +1,20 @@
 /**
  * The engine's answer path behind its existing interface: retrieval selection, one whole
- * answer emission in place of token streaming, identical typed and spoken answers, a speech
- * failure that keeps the text, the turn token that stops an interrupted or closed turn
- * from emitting late, and the storage boundary: whole-answer synthesis units, a probe-backed
- * playback cushion, the labeled eviction notice and the persist ask on the explicit open.
+ * answer emission in place of token streaming, and a turn token that stops an interrupted
+ * or closed turn from emitting late. Speech is tested through the shared message-plan flow.
+ * Model progress covers only STT and the retrieval encoder.
  *
  * Everything is synthetic: the index is the shared fixture, the encoder worker is a double
  * and speech is recorded on the instance, so no model, worker or CV text is involved.
  */
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 
-import {
-  VoiceEngine,
-  TTS_PRIME_SECONDS,
-  reportTtsStorageLoad,
-  ttsStorageVerdict,
-  type Answer,
-  type TtsBinding,
-} from "../src/chat/engine.ts";
-import { MODEL_STORAGE_CLEARED_NOTICE } from "../src/chat/replies.ts";
+import type { Answer, VoiceEngine as VoiceEngineInstance } from "../src/chat/engine.ts";
+import type { AnswerAudioPlayer } from "../src/chat/answer-audio.ts";
+import type { AssistantClipSequence } from "../src/chat/audio-catalog.ts";
 import {
   createRetrievalController,
   WEAK_MATCH_CUE,
@@ -32,6 +26,11 @@ import {
 import { EXPECTED_EMBEDDING } from "../src/chat/retrieval/index.ts";
 import type { EncoderRequest } from "../src/chat/retrieval/encoder/protocol.ts";
 import { axisVector, syntheticIndex } from "./retrieval-fixtures.ts";
+
+const engineSource = process.env.VOICE_ENGINE_SOURCE_OVERRIDE
+  ? pathToFileURL(process.env.VOICE_ENGINE_SOURCE_OVERRIDE).href
+  : new URL("../src/chat/engine.ts", import.meta.url).href;
+const { VoiceEngine } = await import(engineSource) as typeof import("../src/chat/engine.ts");
 
 const QUESTION = "calendar scheduling";
 const DIMENSIONS = EXPECTED_EMBEDDING.dimensions;
@@ -84,12 +83,13 @@ function vectorMessage(id: number): Record<string, unknown> {
 const settle = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
 interface Harness {
-  engine: VoiceEngine;
+  engine: VoiceEngineInstance;
   workers: FakeWorker[];
-  spoken: string[];
+  playedPlans: AssistantClipSequence[];
 }
 
 function setup(): Harness {
+  stubAudioContext();
   const workers: FakeWorker[] = [];
   const encoder = createRetrievalEncoder({
     workerFactory: () => {
@@ -98,16 +98,18 @@ function setup(): Harness {
       return worker;
     },
   });
+  const playedPlans: AssistantClipSequence[] = [];
+  const audioPlayer: AnswerAudioPlayer = {
+    playReferences: async (sequence) => { playedPlans.push(sequence); },
+    stop: () => undefined,
+  };
   const engine = new VoiceEngine({
     loadController: async () => createRetrievalController(syntheticIndex()),
     encoder,
+    audioPlayer: () => audioPlayer,
   });
-  const spoken: string[] = [];
-  engine.speak = async (text) => {
-    spoken.push(text);
-  };
 
-  return { engine, workers, spoken };
+  return { engine, workers, playedPlans };
 }
 
 /** Loads the encoder through the engine and answers the load with the double's ready message. */
@@ -142,6 +144,15 @@ test("the shipping engine holds no prompt route and no generative answer call", 
   assert.ok(!source.includes("WEAK_MATCH_CUE"), "the weak-match cue belongs to the chat UI");
 });
 
+test("storage persistence diagnostics do not forward raw exception payloads", async () => {
+  const sourcePath = process.env.VOICE_ENGINE_SOURCE_OVERRIDE
+    ? pathToFileURL(process.env.VOICE_ENGINE_SOURCE_OVERRIDE)
+    : new URL("../src/chat/engine.ts", import.meta.url);
+  const source = await readFile(sourcePath, "utf8");
+  const rawPayloadTrace = /trace\(\s*[\"']storage persist failed[\"']\s*,/.test(source);
+  assert.equal(rawPayloadTrace, false, "storage failure traces contain only the fixed lifecycle event");
+});
+
 /**
  * Content-free replacement for the deleted prompt-equality assertions: instead of pinning
  * the prompt's instructions and full-CV body, no shipping source may hold a prompt template,
@@ -160,6 +171,8 @@ test("no shipping source composes a prompt or reaches the retired answer runtime
     "CreateMLCEngine",
     "@mlc-ai/web-llm",
     "SmolLM2",
+    "pocket-tts-js",
+    "PocketTTS",
   ];
   // The assistant code must not carry the CV body at all. The site page still renders
   // the public CV for display, which is the page's purpose, not a prompt.
@@ -226,7 +239,7 @@ test("a ready encoder answers the same question semantically", async () => {
   assert.equal(results[0].kind === "answer" && results[0].matching, "semantic");
 });
 
-test("typed and spoken asks select the same answer and speech gets the prepared text", async () => {
+test("typed and recognized asks select the same prepared answer without bypassing the message plan", async () => {
   const harness = setup();
   await readyEncoder(harness);
 
@@ -239,53 +252,38 @@ test("typed and spoken asks select the same answer and speech gets the prepared 
   harness.workers[0].emit(vectorMessage(firstEmbed.id));
   const typed = await typedPending;
 
-  const spokenResults: Answer[] = [];
-  const spokenEmissions: string[] = [];
-  const spokenPending = harness.engine.ask(QUESTION, {
-    speak: true,
-    onResult: (result) => spokenResults.push(result),
-    onDelta: (text) => spokenEmissions.push(text),
+  const recognizedResults: Answer[] = [];
+  const recognizedEmissions: string[] = [];
+  const recognizedPending = harness.engine.ask(QUESTION, {
+    onResult: (result) => recognizedResults.push(result),
+    onDelta: (text) => recognizedEmissions.push(text),
   });
   const embeds = await waitForEmbeds(harness.workers[0], 2);
   const embed = embeds[1];
   assert.equal(embed.type, "embed");
   if (embed.type !== "embed") return;
   harness.workers[0].emit(vectorMessage(embed.id));
-  const spokenAnswer = await spokenPending;
+  const recognizedAnswer = await recognizedPending;
 
-  assert.equal(spokenAnswer, typed, "the same question selects the same prepared answer");
-  assert.deepEqual(spokenEmissions, [typed]);
-  assert.equal(harness.spoken.length, 1);
-  assert.equal(harness.spoken[0], typed, "speech receives the prepared answer text verbatim");
-  assert.ok(!harness.spoken[0].includes(WEAK_MATCH_CUE), "the cue stays outside prepared text");
+  assert.equal(recognizedAnswer, typed, "the same question selects the same prepared answer");
+  assert.deepEqual(recognizedEmissions, [typed]);
+  assert.equal(harness.playedPlans.length, 0, "retrieval never owns message-plan playback");
+  assert.ok(!typed.includes(WEAK_MATCH_CUE), "the cue stays outside prepared text");
   assert.equal(
-    spokenResults[0].kind === "answer" && spokenResults[0].answer,
+    recognizedResults[0].kind === "answer" && recognizedResults[0].answer,
     typedResults[0].kind === "answer" && typedResults[0].answer,
   );
-  assert.equal(spokenResults[0].kind === "answer" && spokenResults[0].matching, "semantic");
+  assert.equal(recognizedResults[0].kind === "answer" && recognizedResults[0].matching, "semantic");
 });
 
-test("a speech failure keeps the typed answer and reports the failure", async () => {
-  const { engine } = setup();
-  engine.speak = async () => {
-    throw new Error("speech-unavailable");
-  };
-
+test("retrieval emits selected text without starting message-plan playback", async () => {
+  const { engine, playedPlans } = setup();
   const emissions: string[] = [];
-  const failures: Error[] = [];
-  const speaking: boolean[] = [];
-
-  const answer = await engine.ask(QUESTION, {
-    speak: true,
-    onDelta: (text) => emissions.push(text),
-    onSpeechError: (error) => failures.push(error),
-    onSpeakingChange: (state) => speaking.push(state),
-  });
+  const answer = await engine.ask(QUESTION, { onDelta: (text) => emissions.push(text) });
 
   assert.notEqual(answer, "");
-  assert.deepEqual(emissions, [answer], "the answer text reached the chat before speech");
-  assert.equal(failures.length, 1);
-  assert.deepEqual(speaking, [true, false], "speaking state is closed even when speech fails");
+  assert.deepEqual(emissions, [answer]);
+  assert.deepEqual(playedPlans, [], "the shared turn flow owns all assistant playback");
 });
 
 test("an interrupt during an in-flight question emits no late answer", async () => {
@@ -294,15 +292,9 @@ test("an interrupt during an in-flight question emits no late answer", async () 
 
   const results: Answer[] = [];
   const emissions: string[] = [];
-  let speakingChanges = 0;
-
   const pending = harness.engine.ask(QUESTION, {
-    speak: true,
     onResult: (result) => results.push(result),
     onDelta: (text) => emissions.push(text),
-    onSpeakingChange: () => {
-      speakingChanges += 1;
-    },
   });
 
   const embeds = await waitForEmbeds(harness.workers[0], 1);
@@ -317,8 +309,7 @@ test("an interrupt during an in-flight question emits no late answer", async () 
   assert.equal(await pending, "");
   assert.equal(results.length, 0, "a superseded turn surfaces no structured result");
   assert.deepEqual(emissions, []);
-  assert.equal(speakingChanges, 0);
-  assert.deepEqual(harness.spoken, [], "no playback starts after the turn was invalidated");
+  assert.deepEqual(harness.playedPlans, [], "no playback starts inside an invalidated retrieval turn");
 });
 
 test("a newer question supersedes the older in-flight one", async () => {
@@ -386,6 +377,7 @@ test("a controller that resolves after an interrupt emits no late answer", async
   // The index load is the deferred work: it resolves only after the turn was invalidated.
   let releaseController: () => void = () => undefined;
   let controllerLoads = 0;
+  const playedPlans: AssistantClipSequence[] = [];
   const engine = new VoiceEngine({
     loadController: () => {
       controllerLoads += 1;
@@ -394,16 +386,15 @@ test("a controller that resolves after an interrupt emits no late answer", async
       });
     },
     encoder,
+    audioPlayer: () => ({
+      playReferences: async (sequence) => { playedPlans.push(sequence); },
+      stop: () => undefined,
+    }),
   });
-  const spoken: string[] = [];
-  engine.speak = async (text) => {
-    spoken.push(text);
-  };
 
   const results: Answer[] = [];
   const emissions: string[] = [];
   const pending = engine.ask(QUESTION, {
-    speak: true,
     onResult: (result) => results.push(result),
     onDelta: (text) => emissions.push(text),
   });
@@ -418,7 +409,7 @@ test("a controller that resolves after an interrupt emits no late answer", async
   assert.equal(await pending, "");
   assert.equal(results.length, 0, "a result resolving after the interrupt surfaces nothing");
   assert.deepEqual(emissions, [], "no late answer reaches the chat");
-  assert.deepEqual(spoken, [], "no playback starts after the interrupt");
+  assert.deepEqual(playedPlans, [], "no playback starts after the interrupt");
   assert.deepEqual(workers, [], "the invalidated turn starts no encoder request");
 });
 
@@ -440,198 +431,607 @@ test("a failed encoder still answers limited instead of losing the turn", async 
   assert.notEqual(answer, "");
 });
 
-/**
- * The speech seam: a fake synth streams fixed chunks through the same callback
- * the vendor worker uses, a fake player records playback, and an AudioContext
- * stub keeps the browser-only resume path inert in node.
- */
-interface SpeechState {
-  generates: string[];
-  played: number[];
-  stops: number;
-  resets: number;
-  flushes: number;
-  /** A test replaces the default three-chunk stream to control timing. */
-  chunkScript: ((emit: (dur: number) => void) => Promise<void>) | null;
-}
-
-function speechHarness(): { state: SpeechState; binding: TtsBinding } {
-  const state: SpeechState = {
-    generates: [],
-    played: [],
-    stops: 0,
-    resets: 0,
-    flushes: 0,
-    chunkScript: null,
-  };
-  const binding: TtsBinding = {
-    voice: "test-voice",
-    synth: {
-      generate: async (text, options) => {
-        state.generates.push(text);
-        const emit = (dur: number) =>
-          options.onChunk(new Float32Array(0), { chunkDuration: dur });
-        if (state.chunkScript) await state.chunkScript(emit);
-        else {
-          emit(0.125);
-          emit(0.5);
-          emit(0.5);
-        }
-      },
-      stop: async () => {
-        state.stops += 1;
-      },
-    },
-    player: {
-      play: (_audio, meta) => state.played.push(meta.chunkDuration),
-      flush: () => {
-        state.flushes += 1;
-      },
-      reset: () => {
-        state.resets += 1;
-      },
-      resume: async () => undefined,
-      underruns: 0,
-    },
-  };
-  return { state, binding };
-}
-
-/** node has no AudioContext; the engine's resume path needs the constructor to exist. */
 function stubAudioContext(): void {
   const scope = globalThis as { AudioContext?: unknown };
   scope.AudioContext ??= class {
     state = "running";
+    destination = {};
     resume(): Promise<void> {
       return Promise.resolve();
     }
   };
 }
 
-test("speech synthesizes the whole answer as one unit, not per sentence", async () => {
-  stubAudioContext();
-  const { state, binding } = speechHarness();
-  const engine = new VoiceEngine({ tts: async () => binding });
+async function withTestAudioContext(
+  state: AudioContextState,
+  resume: () => Promise<void>,
+  run: () => Promise<void>,
+): Promise<void> {
+  const scope = globalThis as unknown as { AudioContext?: typeof AudioContext };
+  const previous = scope.AudioContext;
+  scope.AudioContext = class {
+    readonly state = state;
+    readonly destination = {};
+    resume(): Promise<void> {
+      return resume();
+    }
+  } as unknown as typeof AudioContext;
+  try {
+    await run();
+  } finally {
+    if (previous === undefined) delete scope.AudioContext;
+    else scope.AudioContext = previous;
+  }
+}
 
-  const answer =
-    "First sentence ends here. Second sentence follows it now. Third sentence closes the answer.";
-  await engine.speak(answer);
-
-  assert.deepEqual(
-    state.generates,
-    [answer],
-    "one synthesis call speaks the whole answer (sentence-at-a-time calls stalled playback between sentences)",
-  );
-  assert.equal(state.played.length, 3, "every streamed piece reaches the player");
-  assert.equal(state.flushes, 1, "the schedule is flushed once when synthesis ends");
+test("resumeAudio normalizes an AudioContext constructor failure", async () => {
+  const scope = globalThis as unknown as { AudioContext?: typeof AudioContext };
+  const previous = scope.AudioContext;
+  scope.AudioContext = class {
+    constructor() {
+      throw new Error("constructor-failed");
+    }
+  } as unknown as typeof AudioContext;
+  try {
+    await assert.rejects(new VoiceEngine().resumeAudio(), {
+      message: "Speech audio could not be played.",
+    });
+  } finally {
+    if (previous === undefined) delete scope.AudioContext;
+    else scope.AudioContext = previous;
+  }
 });
 
-test("a word-heavy answer stays one synthesis unit, never per-word calls", async () => {
-  stubAudioContext();
-  const { state, binding } = speechHarness();
-  const engine = new VoiceEngine({ tts: async () => binding });
-
-  const words = Array.from({ length: 40 }, (_, index) => `word${index}`);
-  await engine.speak(words.join(" "));
-
-  assert.equal(
-    state.generates.length,
-    1,
-    "a long text must not split into per-word or per-sentence synthesis calls",
-  );
-  assert.equal(state.generates[0], words.join(" "), "the unit carries the whole answer");
+test("resumeAudio rejects a browser resume failure", async () => {
+  await withTestAudioContext("suspended", async () => { throw new Error("resume-failed"); }, async () => {
+    const engine = new VoiceEngine();
+    await assert.rejects(engine.resumeAudio(), { message: "Speech audio could not be played." });
+  });
 });
 
-test("streamed pieces reach the player as they arrive, in order, before synthesis ends", async () => {
-  stubAudioContext();
-  const { state, binding } = speechHarness();
-  const engine = new VoiceEngine({ tts: async () => binding });
+test("resumeAudio rejects a context that remains non-running", async () => {
+  await withTestAudioContext("suspended", async () => undefined, async () => {
+    const engine = new VoiceEngine();
+    await assert.rejects(engine.resumeAudio(), { message: "Speech audio could not be played." });
+  });
+});
 
-  const playedWhileSynthesizing: number[] = [];
-  state.chunkScript = async (emit) => {
-    emit(0.3);
-    await new Promise((resolve) => setTimeout(resolve, 1));
-    playedWhileSynthesizing.push(state.played.length);
-    emit(0.4);
-    await new Promise((resolve) => setTimeout(resolve, 1));
-    playedWhileSynthesizing.push(state.played.length);
-    emit(0.5);
+test("speech recognition starts before optional output resume settles", async () => {
+  let settleResume: () => void = () => undefined;
+  let resumeSettled = false;
+  const resumePending = new Promise<void>((resolve) => { settleResume = resolve; }).then(() => {
+    resumeSettled = true;
+  });
+
+  await withTestAudioContext("suspended", () => resumePending, async () => {
+    const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+    const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: { crossOriginIsolated: false },
+    });
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: { mediaDevices: { getUserMedia: () => undefined } },
+    });
+    let listening: Promise<void> | null = null;
+    try {
+      let signalStart: () => void = () => undefined;
+      const started = new Promise<void>((resolve) => { signalStart = resolve; });
+      const engine = new VoiceEngine({
+        stt: async () => ({
+          load: async () => undefined,
+          start: async () => { signalStart(); },
+          stop: async () => undefined,
+        }),
+      });
+      listening = engine.startListening();
+      let timeoutId!: ReturnType<typeof setTimeout>;
+      const timeout = new Promise<never>((_resolve, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("STT start was blocked by audio resume")), 1000);
+      });
+      try {
+        await Promise.race([started, timeout]);
+      } finally {
+        clearTimeout(timeoutId);
+      }
+      assert.equal(resumeSettled, false, "STT start reached the injected adapter while resume is pending");
+      settleResume();
+      await listening;
+      await resumePending;
+      await settle();
+    } finally {
+      settleResume();
+      await listening?.catch(() => undefined);
+      if (windowDescriptor === undefined) Reflect.deleteProperty(globalThis, "window");
+      else Object.defineProperty(globalThis, "window", windowDescriptor);
+      if (navigatorDescriptor === undefined) Reflect.deleteProperty(globalThis, "navigator");
+      else Object.defineProperty(globalThis, "navigator", navigatorDescriptor);
+    }
+  });
+});
+
+test("a stale live-voice request does not construct audio or load STT", async () => {
+  await withDeferredAudioContext(async ({ constructions, resumes }) => {
+    const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+    const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: { crossOriginIsolated: false },
+    });
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: { mediaDevices: { getUserMedia: () => undefined } },
+    });
+    let speechLoads = 0;
+    try {
+      const engine = new VoiceEngine({ stt: async () => {
+        speechLoads += 1;
+        throw new Error("stale request must not load STT");
+      } });
+
+      await engine.startListening({ isCurrent: () => false }).catch(() => undefined);
+      assert.equal(constructions(), 0);
+      assert.equal(resumes(), 0);
+      assert.equal(speechLoads, 0);
+    } finally {
+      if (windowDescriptor === undefined) Reflect.deleteProperty(globalThis, "window");
+      else Object.defineProperty(globalThis, "window", windowDescriptor);
+      if (navigatorDescriptor === undefined) Reflect.deleteProperty(globalThis, "navigator");
+      else Object.defineProperty(globalThis, "navigator", navigatorDescriptor);
+    }
+  });
+});
+
+test("closing while STT loads prevents the microphone from starting", async () => {
+  await withTestAudioContext("running", async () => undefined, async () => {
+    const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+    const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: { crossOriginIsolated: false },
+    });
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: { mediaDevices: { getUserMedia: () => undefined } },
+    });
+
+    type TestStt = { load: () => Promise<void>; start: () => Promise<void>; stop: () => Promise<void> };
+    let finishLoad: (stt: TestStt) => void = () => undefined;
+    let signalLoad: () => void = () => undefined;
+    const loading = new Promise<void>((resolve) => { signalLoad = resolve; });
+    const pendingStt = new Promise<TestStt>((resolve) => { finishLoad = resolve; });
+    let starts = 0;
+    let current = true;
+    try {
+      const engine = new VoiceEngine({
+        stt: async () => {
+          signalLoad();
+          return pendingStt;
+        },
+      });
+      const listening = engine.startListening({ isCurrent: () => current });
+      await loading;
+      current = false;
+      finishLoad({
+        load: async () => undefined,
+        start: async () => { starts += 1; },
+        stop: async () => undefined,
+      });
+      await listening;
+      assert.equal(starts, 0, "a canceled choice never opens microphone capture");
+    } finally {
+      if (windowDescriptor === undefined) Reflect.deleteProperty(globalThis, "window");
+      else Object.defineProperty(globalThis, "window", windowDescriptor);
+      if (navigatorDescriptor === undefined) Reflect.deleteProperty(globalThis, "navigator");
+      else Object.defineProperty(globalThis, "navigator", navigatorDescriptor);
+    }
+  });
+});
+
+test("closing during microphone start stops the late-started capture", async () => {
+  await withTestAudioContext("running", async () => undefined, async () => {
+    const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+    const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+    Object.defineProperty(globalThis, "window", {
+      configurable: true,
+      value: { crossOriginIsolated: false },
+    });
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: { mediaDevices: { getUserMedia: () => undefined } },
+    });
+
+    let signalStart: () => void = () => undefined;
+    let finishStart: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => { signalStart = resolve; });
+    const pendingStart = new Promise<void>((resolve) => { finishStart = resolve; });
+    let stopCalls = 0;
+    let current = true;
+    try {
+      const engine = new VoiceEngine({
+        stt: async () => ({
+          load: async () => undefined,
+          start: async () => {
+            signalStart();
+            await pendingStart;
+          },
+          stop: async () => { stopCalls += 1; },
+        }),
+      });
+      const listening = engine.startListening({ isCurrent: () => current });
+      await started;
+      current = false;
+      finishStart();
+      await listening;
+      assert.equal(stopCalls, 1, "a close during start stops capture after the adapter settles");
+    } finally {
+      finishStart();
+      if (windowDescriptor === undefined) Reflect.deleteProperty(globalThis, "window");
+      else Object.defineProperty(globalThis, "window", windowDescriptor);
+      if (navigatorDescriptor === undefined) Reflect.deleteProperty(globalThis, "navigator");
+      else Object.defineProperty(globalThis, "navigator", navigatorDescriptor);
+    }
+  });
+});
+
+test("opening does not load speech recognition before live-voice consent", async () => {
+  let finishEncoder: () => void = () => {};
+  const pendingEncoder = new Promise<void>((resolve) => { finishEncoder = resolve; });
+  let speechLoads = 0;
+  class PendingMatchingEngine extends VoiceEngine {
+    override ensureEncoder(): Promise<void> { return pendingEncoder; }
+    override async ensureStt(): Promise<void> { speechLoads += 1; }
+  }
+  const engine = new PendingMatchingEngine({ storage: () => undefined });
+  const loading = engine.startOnDemand();
+  try {
+    await settle();
+    assert.equal(speechLoads, 0, "opening loads retrieval only; STT awaits live-voice consent");
+  } finally {
+    finishEncoder();
+    await loading;
+  }
+});
+
+test("the engine tracks only STT and retrieval model readiness", () => {
+  const { engine } = setup();
+  assert.deepEqual(Object.keys(engine.states).sort(), ["encoder", "stt"]);
+  assert.deepEqual(Object.keys(engine.progress).sort(), ["encoder", "stt"]);
+});
+
+test("the engine exposes no raw-id greeting or answer playback methods", () => {
+  const { engine } = setup();
+  assert.equal("speakGreeting" in engine, false);
+  assert.equal("speakAnswer" in engine, false);
+});
+
+test("interrupt stops answer-audio playback", () => {
+  let stops = 0;
+  const engine = new VoiceEngine({
+    audioPlayer: () => ({
+      playReferences: async () => undefined,
+      stop: () => { stops += 1; },
+    }),
+  });
+  engine.interrupt();
+  assert.equal(stops, 1);
+});
+
+async function withDeferredAudioContext(
+  run: (context: { constructions: () => number; resumes: () => number; release: () => void }) => Promise<void>,
+): Promise<void> {
+  const scope = globalThis as unknown as { AudioContext?: typeof AudioContext };
+  const previous = scope.AudioContext;
+  let state: AudioContextState = "suspended";
+  let constructions = 0;
+  let resumes = 0;
+  let releaseResume: () => void = () => undefined;
+  const pendingResume = new Promise<void>((resolve) => {
+    releaseResume = () => {
+      state = "running";
+      resolve();
+    };
+  });
+  scope.AudioContext = class {
+    readonly destination = {};
+    constructor() { constructions += 1; }
+    get state(): AudioContextState { return state; }
+    resume(): Promise<void> {
+      resumes += 1;
+      return pendingResume;
+    }
+  } as unknown as typeof AudioContext;
+  try {
+    await run({
+      constructions: () => constructions,
+      resumes: () => resumes,
+      release: () => releaseResume(),
+    });
+  } finally {
+    releaseResume();
+    if (previous === undefined) delete scope.AudioContext;
+    else scope.AudioContext = previous;
+  }
+}
+
+const referencePlan: AssistantClipSequence = Object.freeze([
+  Object.freeze({ kind: "catalog", id: "clarifyPrompt", text: "Which of these did you mean?" }),
+  Object.freeze({ kind: "topic", cardId: "calendar", text: "Synthetic calendar topic" }),
+]);
+
+test("stored reference playback snapshots exact order before delayed resume", async () => {
+  const source = [
+    { kind: "catalog" as const, id: "clarifyPrompt" as const, text: "Which of these did you mean?" },
+    { kind: "topic" as const, cardId: "calendar", text: "Synthetic calendar topic" },
+  ];
+  const mutablePlan = source as unknown as AssistantClipSequence;
+  const calls: string[] = [];
+  let received: AssistantClipSequence | null = null;
+  let retrievalCalls = 0;
+  const player: AnswerAudioPlayer = {
+    playReferences: async (sequence, _context, isCurrent) => {
+      calls.push("references");
+      received = sequence;
+      assert.equal(isCurrent?.(), true);
+    },
+    stop: () => { calls.push("stop"); },
   };
 
-  await engine.speak("The queue must advance while synthesis is still running.");
+  await withDeferredAudioContext(async ({ constructions, resumes, release }) => {
+    const speaking: boolean[] = [];
+    const engine = new VoiceEngine({
+      audioPlayer: () => player,
+      loadController: async () => {
+        retrievalCalls += 1;
+        throw new Error("reference playback must not retrieve");
+      },
+    });
+    const pending = engine.speakSequence(mutablePlan, {
+      onSpeakingChange: (value) => speaking.push(value),
+    });
+    await settle();
 
-  assert.deepEqual(
-    playedWhileSynthesizing,
-    [1, 2],
-    "each piece plays as it arrives; buffering until the end would starve the schedule again",
-  );
-  assert.deepEqual(state.played, [0.3, 0.4, 0.5], "arrival order is playback order");
-  assert.equal(state.flushes, 1, "one flush closes the schedule after the last piece");
+    assert.equal(constructions(), 1);
+    assert.equal(resumes(), 1);
+    assert.equal(received, null, "references wait for the suspended context");
+    assert.deepEqual(calls, ["stop"]);
+    Reflect.set(source[0], "text", "mutated prompt");
+    source.push({ kind: "topic", cardId: "injected", text: "Late topic" });
+
+    release();
+    await pending;
+    assert.deepEqual(received, referencePlan, "the stored plan keeps its original values and order");
+    assert.notEqual(received, mutablePlan, "the delayed operation owns a value snapshot");
+    assert.deepEqual(speaking, [true, false]);
+
+    assert.equal(retrievalCalls, 0, "message playback never repeats retrieval");
+    assert.equal(constructions(), 1, "stored-plan playback owns the AudioContext");
+    assert.equal(resumes(), 1, "a running context is not resumed a second time");
+    assert.deepEqual(calls, ["stop", "references"]);
+  });
 });
 
-test("a turn that ends mid-speech cuts synthesis and playback immediately", async () => {
-  stubAudioContext();
-  const { state, binding } = speechHarness();
-  const engine = new VoiceEngine({ tts: async () => binding });
+test("empty and initially stale reference plans do not create, resume or stop output", async () => {
+  await withDeferredAudioContext(async ({ constructions, resumes }) => {
+    let stops = 0;
+    let plays = 0;
+    const speaking: boolean[] = [];
+    const engine = new VoiceEngine({
+      audioPlayer: () => ({
+        playReferences: async () => { plays += 1; },
+        stop: () => { stops += 1; },
+      }),
+    });
 
-  let current = true;
-  state.chunkScript = async (emit) => {
-    emit(0.5); // speech is playing while the turn is current
-    current = false; // the user takes the turn back
-    emit(0.5); // the worker keeps streaming after that
-    emit(0.5);
-  };
+    await engine.speakSequence([], { onSpeakingChange: (value) => speaking.push(value) });
+    await engine.speakSequence(referencePlan, {
+      isCurrent: () => false,
+      onSpeakingChange: (value) => speaking.push(value),
+    });
 
-  await engine.speak("Anything spoken for this turn.", { isCurrent: () => current });
-
-  assert.equal(state.played.length, 1, "pieces after the turn ended never reach playback");
-  assert.ok(state.stops >= 2, "synthesis is stopped again when the turn dies mid-speech");
-  assert.ok(state.resets >= 2, "already scheduled audio is cut when the turn dies mid-speech");
-  assert.equal(state.flushes, 0, "a dead turn gets no flush");
+    assert.equal(constructions(), 0);
+    assert.equal(resumes(), 0);
+    assert.equal(stops, 0);
+    assert.equal(plays, 0);
+    assert.deepEqual(speaking, []);
+  });
 });
 
-test("the playback cushion holds the probe-supported runway", () => {
-  // Vendor default is 0.4 s; the probe replay showed a thin cushion (0.25 s) let
-  // gaps up to 651 ms through, which restarts speech mid-word. 1.0 s held the
-  // same timeline's gaps to 240 ms, so that is the shipped floor.
-  assert.ok(TTS_PRIME_SECONDS >= 1.0, `prime is ${TTS_PRIME_SECONDS}s`);
+test("replacement and direct stop complete each stored sequence once without late state changes", async () => {
+  await withTestAudioContext("running", async () => undefined, async () => {
+    let stops = 0;
+    const guards: Array<() => boolean> = [];
+    const activeFinish: { current: (() => void) | null } = { current: null };
+    const events: string[] = [];
+    const player: AnswerAudioPlayer = {
+      playReferences: (_sequence, _context, isCurrent) => {
+        guards.push(isCurrent ?? (() => true));
+        return new Promise<void>((resolve) => { activeFinish.current = resolve; });
+      },
+      stop: () => {
+        stops += 1;
+        const finish = activeFinish.current;
+        activeFinish.current = null;
+        finish?.();
+      },
+    };
+    const engine = new VoiceEngine({ audioPlayer: () => player });
+
+    const first = engine.speakSequence(referencePlan, {
+      onSpeakingChange: (speaking) => events.push(`first:${speaking}`),
+    });
+    await settle();
+    assert.deepEqual(events, ["first:true"]);
+    assert.equal(guards[0](), true);
+    await engine.speakSequence([]);
+    assert.equal(stops, 1, "an empty plan does not replace active output");
+    assert.equal(guards[0](), true);
+    assert.deepEqual(events, ["first:true"]);
+
+    const second = engine.speakSequence(referencePlan, {
+      onSpeakingChange: (speaking) => events.push(`second:${speaking}`),
+    });
+    await settle();
+    assert.deepEqual(events, ["first:true", "first:false", "second:true"]);
+    assert.equal(guards[0](), false, "replacement invalidates the prior player consumer");
+    assert.equal(guards[1](), true);
+
+    engine.stopAudio();
+    await Promise.all([first, second]);
+    assert.deepEqual(events, ["first:true", "first:false", "second:true", "second:false"]);
+    assert.equal(guards[1](), false, "direct stop invalidates the active player consumer");
+
+    const third = engine.speakSequence(referencePlan, {
+      onSpeakingChange: (speaking) => events.push(`third:${speaking}`),
+    });
+    await settle();
+    assert.deepEqual(events, ["first:true", "first:false", "second:true", "second:false", "third:true"]);
+    const finish = activeFinish.current;
+    activeFinish.current = null;
+    finish?.();
+    await third;
+    assert.deepEqual(events, [
+      "first:true",
+      "first:false",
+      "second:true",
+      "second:false",
+      "third:true",
+      "third:false",
+    ]);
+  });
 });
 
-test("a warm cache that needs a network fetch is classified as cleared", () => {
-  assert.equal(
-    ttsStorageVerdict("1", { cacheHit: false, networkFetch: true }),
-    "cleared",
-    "marker plus network fetch: the browser dropped the cached model",
-  );
-  assert.equal(ttsStorageVerdict("1", { cacheHit: true, networkFetch: false }), "warm");
-  assert.equal(
-    ttsStorageVerdict(null, { cacheHit: false, networkFetch: true }),
-    "first-visit",
-    "without the marker a fetch is the first visit, not an eviction",
-  );
-  assert.equal(ttsStorageVerdict(null, { cacheHit: true, networkFetch: false }), "warm");
+test("an interrupted stored sequence stopped during resume never reaches playback", async () => {
+  await withDeferredAudioContext(async ({ resumes, release }) => {
+    let stops = 0;
+    let plays = 0;
+    const speaking: boolean[] = [];
+    const engine = new VoiceEngine({
+      audioPlayer: () => ({
+        playReferences: async () => { plays += 1; },
+        stop: () => { stops += 1; },
+      }),
+    });
+    const pending = engine.speakSequence(referencePlan, {
+      onSpeakingChange: (value) => speaking.push(value),
+    });
+    await settle();
+    assert.equal(resumes(), 1);
+
+    engine.interrupt();
+    release();
+    await pending;
+    assert.equal(plays, 0);
+    assert.equal(stops, 2);
+    assert.deepEqual(speaking, [], "a pending operation never opens or clears speaking state");
+  });
 });
 
-test("a restart that misses the warm cache reports the labeled recovery notice", () => {
-  const notices: string[] = [];
+test("caller currentness is rechecked after delayed context resume", async () => {
+  await withDeferredAudioContext(async ({ release }) => {
+    let current = true;
+    let plays = 0;
+    let stops = 0;
+    const speaking: boolean[] = [];
+    const engine = new VoiceEngine({
+      audioPlayer: () => ({
+        playReferences: async () => { plays += 1; },
+        stop: () => { stops += 1; },
+      }),
+    });
+    const pending = engine.speakSequence(referencePlan, {
+      isCurrent: () => current,
+      onSpeakingChange: (value) => speaking.push(value),
+    });
+    await settle();
+    current = false;
+    release();
+    await pending;
 
-  const verdict = reportTtsStorageLoad("1", { cacheHit: false, networkFetch: true }, (text) =>
-    notices.push(text),
-  );
-
-  assert.equal(verdict, "cleared");
-  assert.deepEqual(
-    notices,
-    [MODEL_STORAGE_CLEARED_NOTICE],
-    "an evicted model reaches the panel as the labeled notice, not a silent reload",
-  );
+    assert.equal(plays, 0);
+    assert.equal(stops, 1);
+    assert.deepEqual(speaking, []);
+  });
 });
 
-test("a first visit or a warm reload raises no eviction notice", () => {
-  const notices: string[] = [];
+test("stored sequence playback normalizes player failures and closes speaking state once", async () => {
+  await withTestAudioContext("running", async () => undefined, async () => {
+    const speaking: boolean[] = [];
+    const engine = new VoiceEngine({
+      audioPlayer: () => ({
+        playReferences: async () => { throw new Error("vendor-detail"); },
+        stop: () => undefined,
+      }),
+    });
 
-  reportTtsStorageLoad(null, { cacheHit: false, networkFetch: true }, (text) => notices.push(text));
-  reportTtsStorageLoad("1", { cacheHit: true, networkFetch: false }, (text) => notices.push(text));
+    await assert.rejects(
+      engine.speakSequence(referencePlan, { onSpeakingChange: (value) => speaking.push(value) }),
+      { message: "Speech audio could not be played." },
+    );
+    assert.deepEqual(speaking, [true, false]);
 
-  assert.deepEqual(notices, [], "only a warm marker plus a cache miss is an eviction");
+    const stopFailure = new VoiceEngine({
+      audioPlayer: () => ({
+        playReferences: async () => undefined,
+        stop: () => { throw new Error("vendor-stop-detail"); },
+      }),
+    });
+    await assert.rejects(stopFailure.speakSequence(referencePlan), {
+      message: "Speech audio could not be played.",
+    });
+  });
+});
+
+test("engine starter offer and exact selection need no model, microphone, playback or second retrieval", async () => {
+  const h = setup();
+  const offered = await h.engine.offerStarters();
+  assert.equal(offered.length, 3);
+  assert.equal(new Set(offered.map((choice) => choice.topic)).size, 3);
+  assert.strictEqual(await h.engine.offerStarters(), offered);
+  assert.deepEqual(h.workers, []);
+  assert.deepEqual(h.playedPlans, []);
+  const picked = h.engine.chooseClarification("synthetic-codecs");
+  assert.deepEqual(picked, {
+    kind: "answer", cardId: "synthetic-codecs", topic: "Synthetic audio codecs",
+    answer: "A synthetic fixture records audio codecs.", matching: "semantic", weak: false,
+    sourceRefs: [{ startLine: 1, endLine: 2 }],
+  });
+  assert.deepEqual(await h.engine.offerStarters(), []);
+  assert.deepEqual(h.workers, []);
+});
+
+for (const newer of ["question", "dismiss", "close", "reset"] as const) {
+  test(`delayed engine starter loading cannot revive an offer after ${newer}`, async () => {
+    let release!: (controller: ReturnType<typeof createRetrievalController>) => void;
+    const controller = createRetrievalController(syntheticIndex());
+    let loads = 0;
+    const h = new VoiceEngine({
+      loadController: () => { loads += 1; return new Promise((resolve) => { release = resolve; }); },
+      audioPlayer: () => ({ playReferences: async () => assert.fail("no playback for topics"), stop() {} }),
+    });
+    let open = true;
+    const offer = h.offerStarters({ isCurrent: () => open });
+    let question: Promise<string> | undefined;
+    if (newer === "question") question = h.ask("calendar scheduling");
+    if (newer === "dismiss") h.dismissStarters();
+    if (newer === "close") open = false;
+    if (newer === "reset") h.resetConversation();
+    release(controller);
+    assert.deepEqual(await offer, []);
+    await question;
+    assert.equal(loads, 1);
+    assert.equal(h.chooseClarification("synthetic-ledgers"), null, "stale offer grants no selection authority");
+    if (newer === "reset" || newer === "close") {
+      assert.equal((await h.offerStarters()).length, 3, "an unchanged reopen or fresh conversation can offer topics");
+    } else {
+      assert.deepEqual(await h.offerStarters(), []);
+    }
+  });
+}
+
+test("failed starter index loading is safe and leaves the engine model state untouched", async () => {
+  const engine = new VoiceEngine({ loadController: async () => { throw new Error("synthetic index unavailable"); } });
+  assert.deepEqual(await engine.offerStarters(), []);
+  assert.deepEqual(engine.states, { stt: "idle", encoder: "idle" });
 });

@@ -67,6 +67,8 @@ export interface AnswerCard {
   sourceRefs: SourceRange[];
   answer: string;
   vector: number[];
+  /** Independently reviewed equivalence group; never part of retrieval text. */
+  variantGroup?: string;
 }
 
 export interface ReviewedIndex {
@@ -76,6 +78,7 @@ export interface ReviewedIndex {
 }
 
 const IDENTITY_KEYS = Object.keys(EXPECTED_EMBEDDING) as (keyof EmbeddingIdentity)[];
+const SAFE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -84,6 +87,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "";
+}
+
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value);
+  return actual.length === keys.length && actual.every((key) => keys.includes(key));
 }
 
 function isLineNumber(value: unknown): value is number {
@@ -133,11 +141,19 @@ function readCard(value: unknown, dimensions: number, seen: Set<string>, positio
   if (!isRecord(value)) throw new RetrievalError("card/shape", `cards[${position}]`);
 
   const label = isNonEmptyString(value.id) ? value.id : `cards[${position}]`;
+  const hasVariantGroup = Object.hasOwn(value, "variantGroup");
+  const cardKeys = hasVariantGroup
+    ? ["id", "topic", "tags", "sourceRefs", "answer", "vector", "variantGroup"]
+    : ["id", "topic", "tags", "sourceRefs", "answer", "vector"];
 
-  if (!isNonEmptyString(value.id)) throw new RetrievalError("card/id", label);
+  if (!hasExactKeys(value, cardKeys)) throw new RetrievalError("card/keys", label);
+  if (!isNonEmptyString(value.id) || !SAFE_ID.test(value.id)) throw new RetrievalError("card/id", label);
   if (seen.has(value.id)) throw new RetrievalError("card/duplicate-id", label);
   if (!isNonEmptyString(value.topic)) throw new RetrievalError("card/topic", label);
   if (!isNonEmptyString(value.answer)) throw new RetrievalError("card/answer", label);
+  if (hasVariantGroup && (!isNonEmptyString(value.variantGroup) || !SAFE_ID.test(value.variantGroup))) {
+    throw new RetrievalError("card/variant-group", label);
+  }
   if (!Array.isArray(value.tags) || value.tags.length === 0 || !value.tags.every(isNonEmptyString)) {
     throw new RetrievalError("card/tags", label);
   }
@@ -151,6 +167,7 @@ function readCard(value: unknown, dimensions: number, seen: Set<string>, positio
     sourceRefs: readSourceRefs(value.sourceRefs, label),
     answer: value.answer,
     vector: readVector(value.vector, dimensions, label),
+    ...(hasVariantGroup ? { variantGroup: value.variantGroup as string } : {}),
   };
 }
 
@@ -204,6 +221,17 @@ export function readReviewedIndex(value: unknown): ReviewedIndex {
 
   const seen = new Set<string>();
   const cards = value.cards.map((card, position) => readCard(card, embedding.dimensions, seen, position));
+  const variantGroupCounts = new Map<string, number>();
+
+  for (const card of cards) {
+    if (card.variantGroup !== undefined) {
+      variantGroupCounts.set(card.variantGroup, (variantGroupCounts.get(card.variantGroup) ?? 0) + 1);
+    }
+  }
+
+  for (const [group, count] of variantGroupCounts) {
+    if (count < 2) throw new RetrievalError("index/variant-group-singleton", group);
+  }
 
   return { embedding, cards };
 }

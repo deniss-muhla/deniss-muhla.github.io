@@ -150,6 +150,34 @@ test("the intro blockquote and the profile paragraph are separate profile units"
   assert.equal(unitFor(units, "profile-statement").lines.start, 11);
 });
 
+test("multiple Profile paragraphs keep separate stable IDs, text and source references", () => {
+  const markdown = "# Sample\n\n## Profile\n\nA first documented statement.\n\nA second documented statement.\n\nA third qualified statement.\n";
+  const extraction = extractSourceUnits(markdown);
+  const profiles = extraction.units.filter((unit) => unit.area === "profile");
+
+  assert.deepEqual(profiles, [
+    {
+      area: "profile", kind: "note", cardId: "profile-statement", label: "profile statement",
+      lines: { start: 5, end: 5 }, text: "A first documented statement.",
+    },
+    {
+      area: "profile", kind: "note", cardId: "profile-statement-2", label: "profile statement",
+      lines: { start: 7, end: 7 }, text: "A second documented statement.",
+    },
+    {
+      area: "profile", kind: "note", cardId: "profile-statement-3", label: "profile statement",
+      lines: { start: 9, end: 9 }, text: "A third qualified statement.",
+    },
+  ]);
+  assert.deepEqual(extractSourceUnits(markdown), extraction);
+  const source = { relativePath: "fixture/profile.md", sha256: "synthetic" };
+  assert.deepEqual(scaffoldArtifact({ source, units: extraction.units }).cards.slice(1).map((card) => ({ id: card.id, sourceRefs: card.sourceRefs })), [
+    { id: "profile-statement", sourceRefs: [{ startLine: 5, endLine: 5 }] },
+    { id: "profile-statement-2", sourceRefs: [{ startLine: 7, endLine: 7 }] },
+    { id: "profile-statement-3", sourceRefs: [{ startLine: 9, endLine: 9 }] },
+  ]);
+});
+
 test("short lists are grouped into one unit that reads as a single card", () => {
   const { units } = extractSourceUnits(SYNTHETIC_CV);
 
@@ -159,6 +187,79 @@ test("short lists are grouped into one unit that reads as a single card", () => 
     "A documented language certificate with a date.",
     "A documented subscore.",
   ]);
+});
+
+test("Core Expertise explicitly maps to strengths without changing its source items", () => {
+  const { units, coverage } = extractSourceUnits("# Sample\n\n## Core Expertise\n\n- Reusable UI architecture.\n- Documented technical leadership.\n");
+
+  assert.deepEqual(unitFor(units, "strengths"), {
+    area: "strengths",
+    kind: "group",
+    cardId: "strengths",
+    label: "strengths list",
+    lines: { start: 5, end: 6 },
+    items: ["Reusable UI architecture.", "Documented technical leadership."],
+  });
+  assert.equal(coverage.strengths, 1);
+});
+
+test("technology practice rows preserve exploration wording and raw cells without proficiency metadata", () => {
+  const markdown = `# Sample
+
+## Technology Stack
+
+| Area | Technologies and practices |
+| --- | --- |
+| UI development | Components, browser testing |
+| Current exploration | Exploring local tools, not production experience |
+`;
+  const { units, omissions } = extractSourceUnits(markdown);
+  const rows = units.filter((unit) => unit.area === "technology");
+
+  assert.deepEqual(rows, [
+    {
+      area: "technology",
+      kind: "row",
+      cardId: "technology-ui-development",
+      label: "UI development",
+      lines: { start: 7, end: 7 },
+      items: ["UI development", "Components, browser testing"],
+    },
+    {
+      area: "technology",
+      kind: "row",
+      cardId: "technology-current-exploration",
+      label: "Current exploration",
+      lines: { start: 8, end: 8 },
+      items: ["Current exploration", "Exploring local tools, not production experience"],
+    },
+  ]);
+  assert.ok(rows.every((row) => !Object.hasOwn(row, "level")));
+  assert.deepEqual(omissions.find((entry) => entry.kind === "table-header"), {
+    kind: "table-header",
+    reason: "format-only",
+    lines: { start: 5, end: 5 },
+  });
+  const source = { relativePath: "fixture/practices.md", sha256: "synthetic" };
+  assert.deepEqual(scaffoldArtifact({ source, units }).cards.slice(1).map((card) => card.sourceRefs), [
+    [{ startLine: 7, endLine: 7 }],
+    [{ startLine: 8, endLine: 8 }],
+  ]);
+});
+
+test("technology proficiency comes from the identified Level column, not its position", () => {
+  const { units } = extractSourceUnits(`# Sample
+
+## Technology Stack
+
+| Area | Technologies and practices | Level |
+| --- | --- | --- |
+| Example tools | Documented practices | Intermediate |
+`);
+
+  const row = unitFor(units, "technology-example-tools");
+  assert.deepEqual(row.items, ["Example tools", "Documented practices", "Intermediate"]);
+  assert.equal(row.level, "Intermediate");
 });
 
 test("an employer heading carries its header, context, bullets and stack", () => {
