@@ -9,6 +9,7 @@ export interface CvHeadingPosition {
 }
 
 export interface CvSectionRange {
+  level: number;
   startLine: number;
   endLine: number;
   anchorId: string;
@@ -25,37 +26,44 @@ export function buildCvSectionRanges(
 ): CvSectionRange[] {
   if (!Number.isInteger(markdownLineCount) || markdownLineCount < 1) return [];
 
-  const lines = [...new Set(
+  const positions = [...new Map(
     headings
       .filter(({ level, line }) =>
         Number.isInteger(level) && level >= 1 && level <= 4 &&
         Number.isInteger(line) && line >= 1 && line <= markdownLineCount,
       )
-      .map(({ line }) => line),
-  )].sort((left, right) => left - right);
+      .map((heading) => [heading.line, heading] as const),
+  ).values()].sort((left, right) => left.line - right.line);
 
-  return lines.map((line, index) => ({
-    startLine: line,
-    endLine: lines[index + 1] === undefined ? markdownLineCount : (lines[index + 1] ?? line) - 1,
-    anchorId: cvHeadingId(line),
-  }));
+  return positions.map(({ level, line }, index) => {
+    const nextLine = positions[index + 1]?.line;
+    return {
+      level,
+      startLine: line,
+      endLine: nextLine === undefined ? markdownLineCount : nextLine - 1,
+      anchorId: cvHeadingId(line),
+    };
+  });
 }
 
-/** Returns the first covered section in source-reference order only when its real anchor exists. */
+/** Prefers cited content in reference order; shared identity context is only a title fallback. */
 export function resolveCvAnchor(
   sourceRefs: readonly CvSourceRange[],
   sections: readonly CvSectionRange[],
   hasAnchor: (id: string) => boolean,
 ): string | null {
+  let titleSection: CvSectionRange | undefined;
   for (const sourceRef of sourceRefs) {
-    const section = sections.find(
-      ({ startLine, endLine }) => sourceRef.startLine <= endLine && sourceRef.endLine >= startLine,
-    );
-    if (section === undefined) continue;
-    if (!hasAnchor(section.anchorId)) return null;
+    for (const section of sections) {
+      if (!(sourceRef.startLine <= section.endLine && sourceRef.endLine >= section.startLine)) continue;
+      if (section.level === 1) {
+        titleSection ??= section;
+        continue;
+      }
 
-    return section.anchorId;
+      return hasAnchor(section.anchorId) ? section.anchorId : null;
+    }
   }
 
-  return null;
+  return titleSection !== undefined && hasAnchor(titleSection.anchorId) ? titleSection.anchorId : null;
 }

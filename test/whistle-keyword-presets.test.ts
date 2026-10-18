@@ -11,8 +11,10 @@ import {
 
 const normalize = (value: string): string => value.trim().toLowerCase();
 const lines = (preset: string): string[] => preset.split("\n");
+const selectedPreset = (["names", "medium", "full"] as const)
+  .find((name) => WHISTLE_KEYWORDS === WHISTLE_KEYWORD_PRESETS[name]);
 
-test("a new installed facts tag reaches full using the unchanged preset module", async () => {
+test("installed tag phrases become unique keyword words without changing technical tokens", async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "whistle-fact-tags-"));
   try {
     const modulePath = path.join(workspace, "src/chat/stt/whistle/assets.ts");
@@ -21,22 +23,34 @@ test("a new installed facts tag reaches full using the unchanged preset module",
     await mkdir(path.dirname(factsPath), { recursive: true });
     await writeFile(modulePath, await readFile(new URL("../src/chat/stt/whistle/assets.ts", import.meta.url)));
     await writeFile(factsPath, JSON.stringify({
-      cards: [{ tags: [" Synthetic reviewed tag ", "synthetic REVIEWED tag", "", "   "] }],
+      cards: [{ tags: [
+        " Synthetic\treviewed tag ", "synthetic REVIEWED tag",
+        " C#\t.NET\nNode.js front-end ", "Latvia, EU", " / - , ", "", "   ",
+      ] }],
     }));
 
     const isolated = await import(pathToFileURL(modulePath).href) as typeof import("../src/chat/stt/whistle/assets.ts");
-    assert.ok(lines(isolated.WHISTLE_KEYWORD_PRESETS.full).includes("Synthetic reviewed tag"), "full follows the new facts tag without a preset source edit");
-    assert.equal(lines(isolated.WHISTLE_KEYWORD_PRESETS.full).filter((term) => normalize(term) === "synthetic reviewed tag").length, 1);
-    assert.ok(lines(isolated.WHISTLE_KEYWORD_PRESETS.full).every((term) => term.length > 0 && term === term.trim()));
+    const full = lines(isolated.WHISTLE_KEYWORD_PRESETS.full);
+    for (const word of ["Synthetic", "reviewed", "tag"]) {
+      assert.ok(full.includes(word), "full follows new facts-tag words without a preset source edit");
+      assert.equal(full.filter((term) => normalize(term) === normalize(word)).length, 1);
+    }
+    const firstNewWord = full.indexOf("Synthetic");
+    assert.deepEqual(full.slice(firstNewWord, firstNewWord + 3), ["Synthetic", "reviewed", "tag"], "first spelling and word order are preserved");
+    for (const word of ["c#", ".net", "node.js", "front-end", "latvia", "eu"]) {
+      assert.equal(full.filter((term) => normalize(term) === word).length, 1, `${word} stays intact and unique`);
+    }
+    assert.ok(full.every((word) => !/[\s,]/u.test(word) && /[\p{L}\p{N}]/u.test(word)), "empty and punctuation-only separators are not keywords");
     assert.equal(isolated.WHISTLE_KEYWORD_PRESETS.names, WHISTLE_KEYWORD_PRESETS.names);
     assert.equal(isolated.WHISTLE_KEYWORD_PRESETS.medium, WHISTLE_KEYWORD_PRESETS.medium);
-    assert.equal(isolated.WHISTLE_KEYWORDS, isolated.WHISTLE_KEYWORD_PRESETS.names);
+    assert.ok(selectedPreset, "the active keywords select a named manual preset");
+    assert.equal(isolated.WHISTLE_KEYWORDS, isolated.WHISTLE_KEYWORD_PRESETS[selectedPreset]);
   } finally {
     await rm(workspace, { recursive: true, force: true });
   }
 });
 
-test("manual Whistle keyword presets are newline-safe subsets and cover current fact tags", async () => {
+test("manual Whistle word presets are newline-safe subsets and cover current fact-tag words", async () => {
   const names = lines(WHISTLE_KEYWORD_PRESETS.names);
   const medium = lines(WHISTLE_KEYWORD_PRESETS.medium);
   const full = lines(WHISTLE_KEYWORD_PRESETS.full);
@@ -45,32 +59,28 @@ test("manual Whistle keyword presets are newline-safe subsets and cover current 
   const fullSet = new Set(full.map(normalize));
 
   for (const preset of [names, medium, full]) {
-    assert.ok(preset.every((term) => term.length > 0 && term === term.trim()));
+    assert.ok(preset.every((word) => word.length > 0 && !/\s/u.test(word)), "one word per line");
     assert.equal(new Set(preset.map(normalize)).size, preset.length, "case-folded terms are unique");
   }
   assert.ok([...nameSet].every((term) => mediumSet.has(term)));
   assert.ok([...mediumSet].every((term) => fullSet.has(term)));
   assert.ok(medium.length < full.length);
-  assert.equal(WHISTLE_KEYWORDS, WHISTLE_KEYWORD_PRESETS.names, "default selects names only");
+  assert.ok(selectedPreset, "names, medium and full remain manually selectable");
+  assert.equal(WHISTLE_KEYWORDS, WHISTLE_KEYWORD_PRESETS[selectedPreset]);
 
   for (const required of [
-    "Deniss Muhla",
-    "Denis Muhla",
-    "IF P&C Insurance",
-    "Stream Labs",
-    "Geidans Solutions",
-    "DiatomEnterprises",
-    "Leaselink",
-    "MultiProbe",
-  ]) assert.ok(nameSet.has(normalize(required)), `missing required proper-name term: ${required}`);
-  assert.ok(!nameSet.has("email address") && !nameSet.has("phone"));
+    "Deniss", "Denis", "Muhla", "IF", "P&C", "Insurance", "Stream", "Labs",
+    "Geidans", "Solutions", "DiatomEnterprises", "Leaselink", "MultiProbe",
+  ]) assert.ok(nameSet.has(normalize(required)), `missing required proper-name word: ${required}`);
+  assert.ok(["email", "address", "phone"].every((word) => !nameSet.has(word)));
   assert.ok(!names.some((term) => term.includes("@") || /https?:\/\//i.test(term)));
 
   const facts = JSON.parse(await readFile(new URL("../resources/cv/facts.json", import.meta.url), "utf8")) as {
     cards: { tags?: string[] }[];
   };
-  const tags = new Set(facts.cards.flatMap((card) => card.tags ?? []).map(normalize).filter(Boolean));
-  assert.ok([...tags].every((tag) => fullSet.has(tag)), "full preset covers every current facts.cards[].tags keyword");
+  const tagWords = new Set(facts.cards.flatMap((card) => card.tags ?? [])
+    .flatMap((tag) => tag.split(/[\s,]+/u)).map(normalize).filter((word) => /[\p{L}\p{N}]/u.test(word)));
+  assert.ok([...tagWords].every((word) => fullSet.has(word)), "full covers the words in current facts.cards[].tags");
 
   const loader = await readFile(new URL("../src/chat/stt/whistle/loader.ts", import.meta.url), "utf8");
   const worker = await readFile(new URL("../src/chat/stt/whistle/worker.ts", import.meta.url), "utf8");

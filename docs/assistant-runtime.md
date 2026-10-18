@@ -27,6 +27,13 @@ Keep vendor objects, types and resource lifecycles behind project-owned boundari
 Organize functionality under `src/chat`, `src/offline` and `src/page`, not generic type folders.
 Use explicit project-owned progress/state types across boundaries and narrow vendor adapters.
 
+Whistle's manual `names`, `medium` and `full` keyword presets split phrase terms on whitespace
+and commas, then emit one word per line. Deduplication ignores case and preserves the first
+spelling and order. Punctuation-only separators are omitted; technical tokens such as `C#`,
+`.NET`, `Node.js` and `front-end` stay intact. `WHISTLE_KEYWORDS` selects the desired preset in
+`src/chat/stt/whistle/assets.ts`; reload the page to apply changes to a fresh speech runtime.
+These hints do not change retrieval or establish improved recognition.
+
 ## Consent and turn lifecycle
 
 An explicit opener click or keyboard action opens/reopens unmuted live voice. Its name and
@@ -50,6 +57,12 @@ engine/controller validates the exact offered card through the existing choice b
 without a score, another retrieval or variant selection. Its verbatim answer, source navigation
 and immutable message-bound audio/Replay plan follow the ordinary selected-answer flow and
 current consent/mute policy. Ordinary ambiguity still offers at most two scored choices.
+
+Answer navigation uses the selected card's source ranges and the rendered CV heading positions.
+It prefers the first cited content section (h2-h4), preserving source-reference order. A shared
+name/title citation (h1) is only a fallback for identity/contact-only answers, not the primary
+jump target when content is cited. If the selected content anchor is missing, do not jump to
+the title or an unrelated section. Navigation does not reorder stored citations or change facts.
 
 New chat clears messages, drafts, choices/retry and retrieval context, then repeats the intro
 once in the retained mode/consent. Typed or muted resets stay silent. Already-consented,
