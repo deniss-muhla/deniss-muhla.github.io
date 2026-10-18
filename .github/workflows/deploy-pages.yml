@@ -29,15 +29,40 @@ jobs:
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
-      - name: Set up Vite+
-        uses: voidzero-dev/setup-vp@v1
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: "24"
-          cache: true
-          run-install: true
+          cache: pnpm
 
-      - name: Build static site
-        run: vp run build
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The self-hosted model and font assets live outside the repository; the cache
+      # key follows the pinned manifest, so a changed pin re-downloads and a
+      # re-verification of the cached bytes costs no network.
+      - name: Cache self-hosted model assets
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/cv-assistant/model-assets
+          key: model-assets-${{ hashFiles('scripts/model-assets.mjs') }}
+
+      - name: Fetch self-hosted model assets
+        run: node scripts/fetch-model-assets.mjs
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Run browser-free tests
+        run: pnpm test
+
+      - name: Build static site and typecheck
+        run: pnpm build
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'

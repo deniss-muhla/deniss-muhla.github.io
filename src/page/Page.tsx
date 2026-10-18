@@ -1,18 +1,41 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useRef,
   useState,
   type MouseEvent,
 } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 import { profile } from "../data/content";
+import { OfflineBadge } from "../offline/OfflineBadge";
 import heroPhoto from "../../resources/photo/hero-photo.jpg";
 import cvPhoto from "../../resources/photo/cv-photo.jpg";
 import cvMarkdown from "../../resources/cv/source/cv.md?raw";
+import { buildCvSectionRanges, cvHeadingId, resolveCvAnchor } from "./cv-navigation";
+import type { CvHeadingPosition, CvSourceRange } from "./cv-navigation";
 import styles from "./Page.module.css";
+
+const VoiceChat = lazy(() =>
+  import("../chat/VoiceChat").then((module) => ({ default: module.VoiceChat })),
+);
+
+function headingAttributes(node: { position?: { start?: { line?: number } } } | undefined) {
+  const line = node?.position?.start?.line;
+  if (!Number.isInteger(line) || line === undefined || line < 1) return {};
+
+  return { id: cvHeadingId(line), "data-cv-line": line };
+}
+
+const markdownComponents: Components = {
+  h1: ({ node, ...props }) => <h1 {...props} {...headingAttributes(node)} />,
+  h2: ({ node, ...props }) => <h2 {...props} {...headingAttributes(node)} />,
+  h3: ({ node, ...props }) => <h3 {...props} {...headingAttributes(node)} />,
+  h4: ({ node, ...props }) => <h4 {...props} {...headingAttributes(node)} />,
+};
 
 const headingSelector = "h1, h2, h3, h4, h5, h6";
 const smoothScrollFallbackMs = 1200;
@@ -144,15 +167,46 @@ function findActiveStop(
   return activeIndex;
 }
 
+function preferredScrollBehavior(): ScrollBehavior {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth";
+}
+
 function scrollToCv(e: MouseEvent<HTMLAnchorElement>) {
   e.preventDefault();
-  document.getElementById("cv")?.scrollIntoView({ behavior: "smooth" });
+  document.getElementById("cv")?.scrollIntoView({ behavior: preferredScrollBehavior() });
 }
 
 export function Page() {
   const rootRef = useRef<HTMLDivElement>(null);
   const [stops, setStops] = useState<NavStop[]>([]);
   const [activeIndex, setActiveIndex] = useState(0);
+
+  const navigateToCvSource = useCallback((sourceRefs: readonly CvSourceRange[]) => {
+    const markdown = rootRef.current?.querySelector("[data-cv-markdown]");
+    if (!markdown) return;
+
+    const headings: CvHeadingPosition[] = Array.from(
+      markdown.querySelectorAll<HTMLElement>("[data-cv-line]"),
+      (heading) => ({
+        level: Number(heading.tagName.slice(1)),
+        line: Number(heading.dataset.cvLine),
+      }),
+    );
+    const markdownLineCount = cvMarkdown.split(/\r\n|\n|\r/).length;
+    const sections = buildCvSectionRanges(headings, markdownLineCount);
+    const anchorId = resolveCvAnchor(
+      sourceRefs,
+      sections,
+      (id) => document.getElementById(id) !== null,
+    );
+    if (anchorId === null) return;
+
+    const target = document.getElementById(anchorId);
+    if (!target) return;
+
+    const behavior = preferredScrollBehavior();
+    target.scrollIntoView({ behavior });
+  }, []);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -161,6 +215,7 @@ export function Page() {
       return;
     }
 
+    const nativeScrollTimeline = CSS.supports("animation-timeline: scroll(root block)");
     let frameId = 0;
     let collected = collectStops(root);
 
@@ -182,6 +237,9 @@ export function Page() {
 
       root.toggleAttribute("data-at-top", isAtTop);
       root.toggleAttribute("data-at-bottom", isAtBottom);
+      if (!nativeScrollTimeline) {
+        root.style.setProperty("--page-progress", String(Math.min(Math.max(scrollTop / maxScroll, 0), 1)));
+      }
 
       const nextIndex = findActiveStop(collected, scrollTop, isAtTop, isAtBottom);
 
@@ -258,7 +316,7 @@ export function Page() {
       // `scrollIntoView` would chase it and overshoot.
       window.scrollTo({
         top: getStopTarget(stop, window.scrollY, index === 0),
-        behavior: "smooth",
+        behavior: preferredScrollBehavior(),
       });
 
       if (!shouldRestoreFocus || !focusBefore) {
@@ -297,6 +355,7 @@ export function Page() {
 
   return (
     <div ref={rootRef} className={styles.root} data-at-top="">
+      <OfflineBadge />
       {/* ── Scroll arrows ── */}
       <button
         type="button"
@@ -359,7 +418,7 @@ export function Page() {
             href="#"
             onClick={(e) => {
               e.preventDefault();
-              window.scrollTo({ top: 0, behavior: "smooth" });
+              window.scrollTo({ top: 0, behavior: preferredScrollBehavior() });
             }}
           >
             ↑ Back to top
@@ -371,13 +430,18 @@ export function Page() {
 
         <article className={styles.document}>
           <img className={styles.avatarDoc} src={cvPhoto} alt="Deniss Muhla" />
-          <div className={styles.markdown}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+          <div className={styles.markdown} data-cv-markdown="">
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
               {cvMarkdown}
             </ReactMarkdown>
           </div>
         </article>
       </section>
+
+      {/* ── On-device voice assistant ── */}
+      <Suspense fallback={null}>
+        <VoiceChat onAnswer={navigateToCvSource} />
+      </Suspense>
     </div>
   );
 }
