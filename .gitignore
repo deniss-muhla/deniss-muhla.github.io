@@ -16,7 +16,6 @@ public/downloads/*.pdf
 /public/models/
 
 # Editor directories and files
-# Pi local project configuration
 /.pi/
 /.agents/
 /openspec/

@@ -258,6 +258,7 @@
 
 .arrowDown,
 .arrowUp {
+  --arrow-tap: 0px;
   position: fixed;
   left: 50%;
   width: 32px;
