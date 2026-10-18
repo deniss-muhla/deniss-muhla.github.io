@@ -1,8 +1,8 @@
 .widget {
   /* Fixed readable inverse fallback for engines without native color contrast. */
-  --chat-surface: #cad3f5;
-  --chat-text: #24273a;
-  --chat-outer-focus: #cad3f5;
+  --chat-surface: #4c4f69;
+  --chat-text: #dce0e8;
+  --chat-outer-focus: #eff1f5;
   --chat-line: color-mix(in srgb, var(--chat-text) 45%, var(--chat-surface));
   position: fixed;
   right: 20px;
@@ -23,8 +23,8 @@
 
 .fab {
   position: relative;
-  width: 64px;
-  height: 64px;
+  width: 72px;
+  height: 72px;
   flex: none;
   display: grid;
   place-items: center;
@@ -58,8 +58,8 @@
 }
 
 .icon {
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.7;
@@ -592,13 +592,13 @@
 
 /* Inverse inherited surface follows the real scroll animation. Native contrast chooses
    black/white at the animated midpoint instead of swapping two converging colors. */
-@supports (color: contrast-color(white)) {
+/* @supports (color: contrast-color(white)) {
   .widget {
     --chat-surface: var(--ink);
     --chat-text: contrast-color(var(--chat-surface));
     --chat-outer-focus: contrast-color(var(--bg));
   }
-}
+} */
 
 .newChat, .voiceToggle {
   flex: none;

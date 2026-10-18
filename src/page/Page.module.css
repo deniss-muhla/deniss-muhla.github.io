@@ -260,34 +260,36 @@
 .arrowUp {
   position: fixed;
   left: 50%;
-  width: 44px;
-  height: 44px;
+  width: 32px;
+  height: 32px;
   padding: 0;
-  border: 1px solid #24273a;
-  border-radius: 50%;
+  border: 1px solid #363a4f;
+  border-radius: 25%;
   transform: translateX(-50%);
-  background-color: #fff;
+  background-color: #a5adcb;
   box-shadow: 0 8px 22px rgb(0 0 0 / 28%);
   z-index: 90;
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
+  opacity: .5;
 }
 
 .arrowDown {
-  bottom: 20px;
+  bottom: 9px;
 }
 
 .arrowUp {
-  top: 20px;
+  top: 9px;
 }
 
 .arrowDown::before,
 .arrowUp::before {
   content: "";
   position: absolute;
-  inset: 6px;
+  inset: 4px;
   background-color: #24273a;
+  transform: scale(1.25);
 }
 
 .arrowDown::before {
@@ -316,15 +318,9 @@
 
 .arrowDown:hover:not(:disabled),
 .arrowUp:hover:not(:disabled) {
-  transform: translateX(-50%) scale(1.04);
+  transform: translateX(-50%) scale(1.05);
 }
 
-.arrowDown:focus-visible,
-.arrowUp:focus-visible {
-  outline: 2px solid #24273a;
-  outline-offset: 3px;
-  box-shadow: 0 0 0 6px #fff;
-}
 
 .arrowDown:active:not(:disabled),
 .arrowUp:active:not(:disabled) {
@@ -364,7 +360,7 @@
 
 .cvHeader {
   position: sticky;
-  top: 16px;
+  top: 0;
   z-index: 30;
   max-width: 960px;
   margin: 0 auto 24px;
@@ -375,8 +371,8 @@
   background: color-mix(in srgb, var(--bg) 86%, transparent);
   border: 1px solid color-mix(in srgb, var(--line) 84%, transparent);
   box-shadow: 0 18px 48px color-mix(in srgb, var(--bg-panel) 36%, transparent);
-  backdrop-filter: blur(18px) saturate(130%);
-  -webkit-backdrop-filter: blur(18px) saturate(130%);
+  backdrop-filter: blur(2px) saturate(130%);
+  -webkit-backdrop-filter: blur(2px) saturate(130%);
 }
 
 .cvBackLink {

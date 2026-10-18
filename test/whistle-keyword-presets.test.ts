@@ -72,6 +72,20 @@ test("manual Whistle word presets are newline-safe subsets and cover current fac
     "Deniss", "Denis", "Muhla", "IF", "P&C", "Insurance", "Stream", "Labs",
     "Geidans", "Solutions", "DiatomEnterprises", "Leaselink", "MultiProbe",
   ]) assert.ok(nameSet.has(normalize(required)), `missing required proper-name word: ${required}`);
+  for (const required of [
+    "Latvia", "Riga", "Daugavpils", "Scandinavia", "Baltics", "EU", "GitHub", "LinkedIn",
+    "Copilot", "Microsoft", "MCPS", "MCPD", "IELTS", "Certified", "Professional",
+    "Web", "Developer", "General", "Training", "Linux",
+  ]) assert.ok(nameSet.has(normalize(required)), `missing CV name: ${required}`);
+  for (const required of [
+    "software", "development", "engineering", "programming", "front-end", "back-end",
+    "full-stack", "JavaScript", "TypeScript", "React", "Node.js", "HTML", "CSS", ".NET",
+    "SQL", "API", "REST", "GraphQL", "database", "version", "control", "repository",
+    "CI/CD", "deployment", "unit", "integration", "testing", "debugging", "refactoring",
+    "architecture", "component", "accessibility", "security", "Docker", "Git", "Agile",
+    "algorithms", "data", "structures", "system", "design", "SDLC", "QA", "monitoring",
+    "authentication", "authorization", "Kubernetes", "Python", "Java", "C++", "Go", "Rust",
+  ]) assert.ok(mediumSet.has(normalize(required)), `missing software development term: ${required}`);
   assert.ok(["email", "address", "phone"].every((word) => !nameSet.has(word)));
   assert.ok(!names.some((term) => term.includes("@") || /https?:\/\//i.test(term)));
 
