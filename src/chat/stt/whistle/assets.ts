@@ -49,6 +49,7 @@ const WHISTLE_NAMES = [
   "Copilot",
   "Daugavpils",
   "Denis",
+  "Deniss",
   "Developer",
   "DiatomEnterprises",
   "EU",

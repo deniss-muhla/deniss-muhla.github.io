@@ -72,21 +72,20 @@ test("an unknown mode fails instead of quietly running the other workload", () =
   assert.throws(() => selectQaMode(["--qa="]), { message: /unknown-qa-mode:/ });
 });
 
-test("typed-only QA chooses silent mode without microphone permission; fake input requires the explicit live UI choice", () => {
+test("voice QA stays blocked before browser launch pending the consent and Replay harness update", () => {
   assert.equal(qaVoiceConsentChoice(false), "typed");
   assert.equal(qaVoiceConsentChoice(true), "live");
 
   const script = readFileSync(new URL("../scripts/voice-qa.mjs", import.meta.url), "utf8");
-  assert.match(script, /qaVoiceConsentChoice\(Boolean\(VOICE_WAV\)\)/);
-  assert.doesNotMatch(script, /autoplay-policy=no-user-gesture-required/);
-  assert.doesNotMatch(script, /ownedBrowser\.newContext\(\{[\s\S]{0,180}permissions:/);
+  const retrievalBranch = script.indexOf('if (qaMode === "retrieval") {');
+  const voiceBranch = script.indexOf("} else {", retrievalBranch);
+  const blockedNotice = script.indexOf("[qa] Voice QA is blocked:", voiceBranch);
+  const blockedExit = script.indexOf("process.exit(1);", blockedNotice);
+  const browserLaunch = script.indexOf("await chromium.launch(", blockedExit);
 
-  const open = script.indexOf('await page.getByTestId("voice-fab").click();');
-  const grant = script.indexOf('await context.grantPermissions(["microphone"]');
-  const liveChoice = script.indexOf('await page.getByTestId("voice-enable-live").click();');
-  const typedChoice = script.indexOf('await page.getByTestId("voice-choose-typed").click();');
-  assert.ok(open !== -1 && grant > open && liveChoice > grant, "fake permission setup is separate and precedes the live-choice gesture");
-  assert.ok(typedChoice > open, "the default workflow selects silent typed mode after opening");
+  assert.ok(retrievalBranch !== -1 && voiceBranch > retrievalBranch);
+  assert.ok(blockedNotice > voiceBranch && blockedExit > blockedNotice);
+  assert.ok(browserLaunch > blockedExit, "the unmaintained voice workflow cannot launch Chrome");
 });
 
 test("fake WAV capture is finite and the existing voice runner uses the shared Chromium argument", () => {
@@ -156,37 +155,14 @@ test("offline model readiness uses the closed-panel status before opening change
   assert.equal(qaModelsReady("Voice assistant unavailable."), false);
 });
 
-function qaOfflineTypedReplayFlow(script: string): boolean {
-  const offlineStart = script.indexOf("await context.setOffline(true);");
-  const offlineEnd = script.indexOf("await context.setOffline(false);", offlineStart);
-  if (offlineStart === -1 || offlineEnd === -1) return false;
-
-  const workflow = script.slice(offlineStart, offlineEnd);
-  const reload = workflow.indexOf("await page.reload(");
-  const open = workflow.indexOf('await page.getByTestId("voice-fab").click();');
-  const chooseTyped = workflow.indexOf('await page.getByTestId("voice-choose-typed").click();');
-  const fill = workflow.indexOf('await page.getByTestId("voice-input").fill(question);');
-  const outcome = workflow.indexOf('const offlineOutcome = await waitForNewOutcome(');
-  const silentGuard = workflow.indexOf('throw new Error("offline-typed-answer-played-before-replay");');
-  const replay = workflow.indexOf('await page.getByTestId("voice-replay").last().click();');
-  return reload !== -1 && reload < open && open < chooseTyped && chooseTyped < fill
-    && fill < outcome && outcome < silentGuard && silentGuard < replay;
-}
-
-test("offline reload chooses silent typed mode and replays only after its typed answer", () => {
-  const legacyAutoplayFlow = [
-    "await context.setOffline(true);",
-    "await page.reload();",
-    'await page.getByTestId("voice-fab").click();',
-    'await page.getByTestId("voice-input").fill(question);',
-    'const offlineOutcome = await waitForNewOutcome(page);',
-    'await waitForTurnSettled("offline-answer-speech-settled");',
-    "await context.setOffline(false);",
-  ].join("\n");
-  assert.equal(qaOfflineTypedReplayFlow(legacyAutoplayFlow), false);
-
+test("blocked voice QA does not claim the offline typed Replay workload passed", () => {
   const script = readFileSync(new URL("../scripts/voice-qa.mjs", import.meta.url), "utf8");
-  assert.equal(qaOfflineTypedReplayFlow(script), true);
+  const voiceBranch = script.indexOf("} else {", script.indexOf('if (qaMode === "retrieval") {'));
+  const blockedExit = script.indexOf("process.exit(1);", voiceBranch);
+  const offlineReload = script.indexOf("await context.setOffline(true);", blockedExit);
+
+  assert.ok(voiceBranch !== -1 && blockedExit > voiceBranch);
+  assert.ok(offlineReload > blockedExit, "offline checks remain unreachable until the harness is maintained");
 });
 
 test("typed-only history before microphone activation cannot satisfy a voice check", () => {

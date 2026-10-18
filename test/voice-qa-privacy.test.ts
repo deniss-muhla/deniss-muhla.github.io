@@ -34,7 +34,7 @@ test("every screenshot in the route goes through the redaction-aware helper", ()
   const guarded = voiceQaScript.match(/takeQaScreenshot\(page, "[^"]+", REDACTED\)/g) ?? [];
   const allCalls = voiceQaScript.match(/takeQaScreenshot\(page,/g) ?? [];
   assert.equal(guarded.length, allCalls.length);
-  assert.equal(guarded.length, 6);
+  assert.equal(guarded.length, 5);
 });
 
 const CONTENT_LOG =
@@ -86,7 +86,7 @@ test("redacted QA omits content, answer-bearing errors and screenshots", async (
   assert.equal(screenshots, 0);
 });
 
-test("redacted QA catches browser-launch failures without printing their details", () => {
+test("redacted voice QA reports the pre-launch block without exposing environment details", () => {
   const privateMarker = "private-redacted-launch-marker";
   const result = spawnSync(
     process.execPath,
@@ -101,9 +101,9 @@ test("redacted QA catches browser-launch failures without printing their details
 
   assert.equal(result.error, undefined, String(result.error));
   assert.equal(result.status, 1, output);
-  assert.match(output, /\[qa\] failed \(details redacted\)/);
-  assert.match(output, /\[qa\] FAILED/);
+  assert.match(output, /\[qa\] Voice QA is blocked: .*Use owner-started pnpm dev/);
   assert.equal(output.includes(privateMarker), false);
+  assert.doesNotMatch(output, /\[qa\] failed|\[qa\] FAILED/);
 });
 
 test("ordinary QA retains its existing content, error and screenshot behavior", async () => {

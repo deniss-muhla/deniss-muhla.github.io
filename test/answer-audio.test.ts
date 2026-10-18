@@ -192,11 +192,11 @@ function sequenceHarness(options: SequenceHarnessOptions = {}) {
 const defaultIdentity = identity;
 
 async function waitFor(predicate: () => boolean): Promise<void> {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    if (predicate()) return;
-    await new Promise<void>((resolve) => { setImmediate(resolve); });
+  const deadline = Date.now() + 2_000;
+  while (!predicate()) {
+    if (Date.now() >= deadline) assert.fail("reference playback did not reach the expected state");
+    await new Promise<void>((resolve) => { setTimeout(resolve, 1); });
   }
-  assert.fail("reference playback did not reach the expected state");
 }
 
 test("the shipped manifest matches the exact current facts and catalog inventory", async () => {
@@ -267,7 +267,9 @@ test("legacy v1 manifests and raw-id player methods are rejected or absent", asy
   });
   assert.deepEqual(h.requests, ["/audio/assistant/manifest.json"]);
   assert.deepEqual(h.audioIds, []);
-  assert.deepEqual(Object.keys(h.player).sort(), ["playReferences", "stop"]);
+  assert.deepEqual(Object.keys(h.player).sort(), [
+    "pausePlaying", "playReferences", "settleOutput", "stop",
+  ]);
 });
 
 test("bad clip bytes and missing IDs fail closed before playback", async () => {

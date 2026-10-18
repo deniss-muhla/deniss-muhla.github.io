@@ -356,7 +356,7 @@ test("no new parser dependency is added and prepare reaches neither the model no
 });
 
 test("the checked-in CV digest is the one the commands and the review gate depend on", () => {
-  assert.equal(source.sha256, "93bc0ecaeafad56e0d199b8b634ea3d45b5636d3e3a603fdfe7f2bac2bd3fb92");
+  assert.equal(source.sha256, "b10d675e9dd83f700b69e8caf8a091de3e5173c685947e91fc5041f0095c37b8");
   assert.equal(source.lineCount > 1, true);
   assert.deepEqual(validateArtifact(syntheticCandidate(source.sha256, source.lineCount), {
     sourceRelativePath: source.relativePath,
