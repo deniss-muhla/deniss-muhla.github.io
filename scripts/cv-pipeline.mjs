@@ -10,6 +10,8 @@ import { remark } from "remark";
 import remarkGfm from "remark-gfm";
 import remarkHtml from "remark-html";
 
+import { MODEL_ASSETS_CACHE, MODEL_ASSET_SETS } from "./model-assets.mjs";
+
 const thisFile = fileURLToPath(import.meta.url);
 const thisDir = path.dirname(thisFile);
 const rootDir = path.resolve(thisDir, "..");
@@ -101,12 +103,47 @@ async function fileExists(filePath) {
   }
 }
 
+/**
+ * The `@font-face` blocks the two families the CV uses, as data URLs.
+ *
+ * The page keeps these same faces for the `/fonts/` routes and the PDF reuses them instead of
+ * carrying a second copy of the table: a headless page has no site origin to fetch the routes
+ * from, so each `url(/fonts/...)` is rewritten to the cached woff2 bytes whose digests
+ * `scripts/model-assets.mjs` pins.
+ */
+async function pdfFontFacesCss() {
+  const css = await fs.readFile(path.join(rootDir, "src", "styles", "global.css"), "utf8");
+  const fonts = MODEL_ASSET_SETS.find((set) => set.id === "google-fonts-css2");
+  const faces = (css.match(/@font-face \{[^}]*\}/g) ?? []).filter((face) =>
+    /font-family: "(?:JetBrains Mono|Libre Baskerville)"/.test(face),
+  );
+
+  if (fonts === undefined || faces.length === 0) throw new Error("pdf-font-faces-missing");
+
+  let facesCss = "";
+
+  for (const face of faces) {
+    const url = face.match(/url\(\/fonts\/([^)]+)\)/);
+
+    if (url === null) throw new Error("pdf-font-route-missing");
+
+    const bytes = await fs.readFile(path.join(MODEL_ASSETS_CACHE, fonts.id, fonts.rev, url[1]), {
+      encoding: "base64",
+    });
+
+    facesCss += `${face.replace(url[0], `url(data:font/woff2;base64,${bytes})`)}\n`;
+  }
+
+  return facesCss;
+}
+
 async function renderHtml(markdown) {
   const bodyHtml = String(
     await remark().use(remarkGfm).use(remarkHtml).process(markdown),
   );
   const structuredHtml = sectionizeHtml(bodyHtml);
   const avatarDataUrl = await fs.readFile(cvPhotoPath, { encoding: "base64" });
+  const fontFaces = await pdfFontFacesCss();
 
   return `<!doctype html>
   <html lang="en">
@@ -115,7 +152,7 @@ async function renderHtml(markdown) {
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       <title>Deniss Muhla CV</title>
       <style>
-        @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap");
+        ${fontFaces}
 
         @page {
           size: A4;

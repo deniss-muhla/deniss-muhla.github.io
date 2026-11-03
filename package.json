@@ -4,14 +4,25 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vp dev",
+    "dev": "vite",
     "typecheck": "tsc -b",
     "cv:build": "node ./scripts/cv-pipeline.mjs",
-    "build": "vp run typecheck && vp build",
-    "build:site": "tsc -b && vp build",
-    "preview:site": "vp preview"
+    "build": "tsc -b && pnpm cv:facts:check && pnpm cv:audio:check && vite build",
+    "build:site": "tsc -b && pnpm cv:facts:check && pnpm cv:audio:check && vite build",
+    "preview:site": "vite preview",
+    "test": "node --test test/cv-facts-check.test.ts test/cv-facts-cli.test.ts test/cv-facts-embed.test.ts test/cv-facts-extract.test.ts test/cv-facts-paths.test.ts test/cv-facts-promote.test.ts test/cv-model-evaluate.test.ts test/answer-audio.test.ts test/cv-audio.test.ts test/engine.test.ts test/offline-chat-report.test.ts test/qa-deadlines.test.ts test/replies.test.ts test/retrieval-controller.test.ts test/retrieval-encoder-assets.test.ts test/retrieval-encoder-client.test.ts test/retrieval-encoder-pooling.test.ts test/retrieval-encoder-protocol.test.ts test/retrieval-index.test.ts test/retrieval-lexical.test.ts test/retrieval-qa-admission.test.ts test/retrieval-qa-cache.test.ts test/retrieval-qa-orchestration.test.ts test/retrieval-qa-startup.test.ts test/retrieval-reviewed-index.test.ts test/retrieval-scoring.test.ts test/retrieval-selection.test.ts test/transcript.test.ts test/cv-navigation.test.ts test/turn.test.ts test/whistle-keyword-presets.test.ts test/whistle-stt.test.ts test/whistle-utterance.test.ts test/whistle-echo-cancellation.test.ts test/whistle-worker-load.test.ts test/whistle-worker-transform.test.ts test/voicechat-lifecycle.test.ts test/voice-qa-checks.test.ts test/voice-qa-privacy.test.ts",
+    "test:browser": "node --test test/cv-model-evaluate.integration.test.ts",
+    "cv:smoke": "node scripts/cv-model-evaluate.ts",
+    "cv:facts": "node ./scripts/cv-facts.mjs prepare",
+    "cv:facts:embed": "node ./scripts/cv-facts.mjs embed",
+    "cv:facts:check": "node ./scripts/cv-facts.mjs check",
+    "cv:facts:promote": "node ./scripts/cv-facts.mjs promote",
+    "cv:audio:generate": "node ./scripts/cv-audio.mjs",
+    "cv:audio:check": "node ./scripts/cv-audio.mjs --check",
+    "lint": "oxlint"
   },
   "dependencies": {
+    "@huggingface/transformers": "4.3.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
@@ -22,18 +33,13 @@
     "@types/react": "^19.2.3",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "oxlint": "1.85.0",
+    "playwright-core": "^1.63.0",
     "puppeteer": "^24.31.0",
     "remark": "^15.0.1",
     "remark-html": "^16.0.1",
     "typescript": "6.0.2",
-    "vite": "npm:@voidzero-dev/vite-plus-core@latest",
-    "vite-plus": "latest"
+    "vite": "8.3.1"
   },
-  "packageManager": "pnpm@10.33.0",
-  "pnpm": {
-    "overrides": {
-      "vite": "npm:@voidzero-dev/vite-plus-core@latest",
-      "vitest": "npm:@voidzero-dev/vite-plus-test@latest"
-    }
-  }
+  "packageManager": "pnpm@10.33.0"
 }

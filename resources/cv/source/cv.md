@@ -28,7 +28,7 @@ IF delivers P&C insurance solutions across Scandinavia and the Baltics. I work a
 
 - Implemented and maintained reusable UI components and design-system integrations across multiple customer-facing applications.
 - Collaborated with product teams to turn integration feedback into shared component improvements.
-- Evaluated component architecture and adoption trade-offs across products with different technology stacks and release requirements.
+- Evaluated Web Components for the shared design system so teams could reuse the same UI components in React, ASP.NET applications, and plain HTML pages, considering product technology stacks and release requirements.
 - Advocated for atomic, modular components to keep the system adaptable and reduce product-specific bloat.
 - Help improve the team's development workflow by customising coding agents to follow project conventions and support everyday engineering tasks.
 - Create specialised, reusable agent skills that help other teams use the company's design-system components and artifacts efficiently and consistently.

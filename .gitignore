@@ -13,6 +13,13 @@ dist-ssr
 .vite
 *.local
 public/downloads/*.pdf
+/public/models/
+
+# Disposable model-free isolation-probe fixtures only.
+/.cache/cv-pipeline/probes/
+
+# Pinned macOS CPU runtime and ignored one-off synthesis tooling.
+/.cache/cv-pipeline/runtime/macos-arm64-cpu/
 
 # Editor directories and files
 /.pi/
