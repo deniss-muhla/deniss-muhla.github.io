@@ -443,7 +443,7 @@ test("both build scripts run the offline gate and stop before the bundler on a s
       assert.deepEqual(fs.readFileSync(to), fs.readFileSync(from), `${path.basename(from)} was not copied unchanged`);
     }
 
-    for (const stub of ["tsc", "cv-audio-check", "vite"]) {
+    for (const stub of ["tsc", "vite"]) {
       const stubPath = path.join(project, "bin", stub);
 
       fs.writeFileSync(stubPath, `#!/bin/sh\necho "${stub} ran" >> "$GATE_LOG"\nexit 0\n`, { mode: 0o755 });
@@ -490,7 +490,6 @@ test("both build scripts run the offline gate and stop before the bundler on a s
             build: manifest.scripts.build,
             "build:site": manifest.scripts["build:site"],
             "cv:facts:check": manifest.scripts["cv:facts:check"],
-            "cv:audio:check": "cv-audio-check",
           },
         },
         null,

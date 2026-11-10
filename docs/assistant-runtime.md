@@ -20,7 +20,7 @@ Keep vendor objects, types and resource lifecycles behind project-owned boundari
   resource ownership into components. Components own presentation/interaction state only.
 - The Paradee adapter synthesizes the text in immutable message plans without fetching clips.
   Replay uses the stored plan without another retrieval. Failed synthesis surfaces an error and
-  never falls back to another voice. The older clip player is not used by the default engine.
+  never falls back to another voice.
 
 Organize functionality under `src/chat`, `src/offline` and `src/page`, not generic type folders.
 Use explicit project-owned progress/state types across boundaries and narrow vendor adapters.
@@ -148,9 +148,8 @@ Cache Storage first and loads `needle.js` with `importScripts`. When touching th
 verify actual served bytes in dev and built routing and retain a real fake-microphone
 transcription through the pinned runtime, not only a copied inventory comparison.
 
-Paradee generates speech locally at runtime. The prerecorded corpus and facts/audio pair guard
-are not used. The facts check remains required. See the [audio pipeline](audio-pipeline.md)
-for runtime and smoke-check limitations.
+Paradee generates speech locally at runtime. The facts check remains required. See
+[manual testing](manual-testing.md) for runtime and smoke-check limitations.
 
 ## Cache and recovery ownership
 

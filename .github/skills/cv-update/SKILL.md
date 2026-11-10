@@ -15,7 +15,6 @@ description: >
   checks and failure handling.
 - [Facts skill](../cv-facts/SKILL.md): source-qualified answers, coverage, whole-index review and
   offline validation.
-- [Audio pipeline](../../../docs/audio-pipeline.md): runtime speech and local smoke checks.
 - [Manual testing](../../../docs/manual-testing.md): rendered CV/PDF, typed answers, stored Replay
   and separately consented live voice. Source/build checks do not establish runtime acceptance.
 
@@ -35,7 +34,6 @@ Routine in-scope edits, regeneration and local checks may proceed under the appr
 the [facts interface](../cv-facts/SKILL.md#current-command-interface). Preserve an existing reviewed
 whole index when its source/embedding identity already matches. Stop for unsupported claims, private
 material, uncertain provenance, absent independent review, failed checks or missing runtime pins.
-Legacy Kitten audio tooling is not used by the runtime or build.
 
 A PDF build refreshes the PDF only. Git staging, committing, pushing, publication and archive remain
 separate explicit actions. Use Git for committed tracked-file recovery; do not make backup copies.

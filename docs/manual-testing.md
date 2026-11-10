@@ -104,9 +104,8 @@ starting any manual Vite server, verify the normal commands cannot violate that 
 - Set `OFFLINE_CHAT_QA_ONLY=1` before loading config; verify no `cv-artifacts` plugin.
 - Create the server with `configFile: false`.
 - Use an external temporary `publicDir` with only `favicon.svg`, `sw.js`, `sw-register.js`.
-- Deny `/public` and `/downloads`, plus `/audio` for STT-only checks. If playback is explicitly
-  approved, allow only the validated manifest and exact content-hashed clips, not arbitrary
-  public-tree paths.
+- Deny `/public`, `/downloads` and `/audio`. Allow only pinned model routes needed by the check,
+  not arbitrary public-tree paths.
 
 For restricted BUILT, verify the same plugin exclusion; use `configFile: false`, `publicDir:
 false`, `copyPublicDir: false` and external output. Copy only those three shell files and serve

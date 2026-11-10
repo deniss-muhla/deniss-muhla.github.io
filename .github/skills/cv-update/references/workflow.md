@@ -6,7 +6,7 @@ rules](../../../../docs/cv-publication.md) before editing.
 ## Owner-approved sequence
 
 A CV change needs a newly reviewed whole answer index, not just a new PDF. The assistant synthesizes
-speech on device; it does not need a matching prerecorded corpus.
+speech on device.
 
 1. **Edit the source.** Update [the canonical CV](../../../../resources/cv/source/cv.md). Review
    the [public career notes](../../../../resources/README.md) and `resources/cv/cv-gaps.md`, if
@@ -47,5 +47,4 @@ publish or archive without separate authority.
 Facts support direct final-path preparation and embedding through the [facts command interface](../../cv-facts/SKILL.md#current-command-interface).
 Preparation writes a scaffold only; authoring and independent whole-index review remain required.
 `pnpm cv:facts:check` is read-only and does not prove source truth, pronunciation, licensing or
-publication acceptance. Legacy Kitten audio commands are not used by the runtime or build; see
-[audio pipeline](../../../../docs/audio-pipeline.md).
+publication acceptance.

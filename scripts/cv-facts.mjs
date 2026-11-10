@@ -56,8 +56,8 @@ Options:
   --cache <dir>            embed: external model cache directory
   -h, --help               show this help
 
-Preparation leaves an incomplete facts/audio pair. Author and independently review every card,
-embed explicitly, then pass both installed-pair checks before serving. A check does not record
+Preparation leaves an incomplete facts index. Author and independently review every card,
+embed explicitly, then pass the facts check before serving. A check does not record
 source review. If the existing reviewed identity already matches, do not regenerate it needlessly.
 
 The reviewed index is ${path.relative(process.cwd(), REVIEWED_ARTIFACT_PATH) || REVIEWED_ARTIFACT_PATH}.
@@ -124,7 +124,7 @@ function runPrepare(options) {
   const source = readCanonicalSource();
   if (options.final === true) {
     const result = prepareFinalArtifact({ source, force: options.force === true });
-    log(`prepared final scaffold: ${result.mappings.length} source units; facts/audio pair incomplete`);
+    log(`prepared final scaffold: ${result.mappings.length} source units; facts index incomplete`);
     for (const { cardId, lines } of result.mappings) log(`mapped ${cardId} at ${lines.start}-${lines.end}`);
     for (const omission of result.omissions) {
       const location = omission.lines ? `at ${omission.lines.start}-${omission.lines.end}` : `count=${omission.count}`;
@@ -183,7 +183,7 @@ async function runEmbed(options, loadRuntime) {
   const { findings } = validateArtifact(artifact, { ...context, embeddingPending: true });
   reportFindings("embed", findings);
   if (findings.length > 0) {
-    log("embed failed; facts/audio pair incomplete; prior facts bytes untouched");
+    log("embed failed; facts index incomplete; prior facts bytes untouched");
     return 1;
   }
   if (artifact.cards.length === 0) throw new CvFactsError("embed/empty-index");
@@ -204,7 +204,7 @@ async function runEmbed(options, loadRuntime) {
   const finalValidation = validateArtifact(embedded, context);
   reportFindings("embed", finalValidation.findings);
   if (finalValidation.findings.length > 0) {
-    log("embed failed; facts/audio pair incomplete; prior facts bytes untouched");
+    log("embed failed; facts index incomplete; prior facts bytes untouched");
     return 1;
   }
 
@@ -219,7 +219,7 @@ async function runEmbed(options, loadRuntime) {
   log(`${options.final === true ? "final index" : "candidate"}: ${candidatePath}`);
   if (options.final === true) {
     log("--confirm-reviewed is an acknowledgment, not source-review evidence or owner acceptance");
-    log("facts/audio pair incomplete until both installed-pair checks pass; do not serve a mismatched pair");
+    log("facts index incomplete until the facts check passes; do not serve an incomplete index");
   }
 
   return 0;
@@ -336,7 +336,7 @@ async function main() {
     for (const line of describeFailure(error)) console.error(line);
 
     if (process.argv[2] === "prepare" || process.argv[2] === "embed") {
-      console.error("[cv] generation did not complete; do not serve an incomplete or mismatched facts/audio pair");
+      console.error("[cv] generation did not complete; do not serve an incomplete facts index");
     }
     process.exitCode = 1;
   }

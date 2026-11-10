@@ -10,9 +10,12 @@ class FakeWorker {
   listeners = new Set<(event: MessageEvent) => void>();
   constructor() { FakeWorker.latest = this; }
   postMessage(message: { id: number; text?: string; prepare?: boolean }) { this.sent.push(message); }
-  addEventListener(type: string, listener: (event: MessageEvent) => void) { if (type === "message") this.listeners.add(listener); }
-  removeEventListener(type: string, listener: (event: MessageEvent) => void) { if (type === "message") this.listeners.delete(listener); }
-  terminate() {}
+  addEventListener(type: string, listener: (event: MessageEvent) => void) { if (type === "message") this.listeners.add(listener); else if (type === "error") this.errors.add(listener); }
+  removeEventListener(type: string, listener: (event: MessageEvent) => void) { if (type === "message") this.listeners.delete(listener); else if (type === "error") this.errors.delete(listener); }
+  terminated = false;
+  errors = new Set<(event: MessageEvent) => void>();
+  terminate() { this.terminated = true; }
+  fail() { for (const listener of this.errors) listener({} as MessageEvent); }
   reply(data: unknown) {
     const event = { data } as MessageEvent;
     for (const listener of this.listeners) listener(event);
@@ -76,7 +79,7 @@ test("pause holds pending synthesis and resumes a short interruption", async () 
   } finally { restore(); }
 });
 
-test("running source pause, stop and natural completion have distinct outcomes", async () => {
+test("running source pause and stop have distinct outcomes", async () => {
   const { player, context, restore } = setup();
   try {
     const speaking = player.speak("hello", context.asAudio());
@@ -154,5 +157,21 @@ test("a non-running context cannot acquire a native hold", async () => {
     assert.equal(player.pausePlaying(), null);
     player.stop();
     await assert.rejects(speaking, /cancelled/);
+  } finally { restore(); }
+});
+
+ test("fatal preparation error terminates worker and retry creates a new one", async () => {
+  const { player, restore } = setup();
+  try {
+    const first = player.prepare();
+    const failed = FakeWorker.latest;
+    failed.fail();
+    await assert.rejects(first, /Speech model unavailable/);
+    assert.equal(failed.terminated, true);
+    const retry = player.prepare();
+    const next = FakeWorker.latest;
+    assert.notEqual(next, failed);
+    next.reply({ id: -1, ready: true });
+    await retry;
   } finally { restore(); }
 });

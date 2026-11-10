@@ -1,12 +1,12 @@
 /**
- * Finite, project-owned reply text and immutable clip references for prerecorded speech.
+ * Finite, project-owned reply text and immutable speech-plan references.
  * This prepares a message sequence only; it does not bind assets, play audio or synthesize.
  */
 import { GREETING } from "./cv-context.ts";
 import { WEAK_MATCH_CUE, type Answer } from "./retrieval/controller.ts";
 import type { ClarificationChoice } from "./retrieval/selection.ts";
 
-/** The exact fixed assistant messages covered by the prerecorded catalog. */
+/** The exact fixed assistant messages used in speech plans. */
 export const AUDIO_CATALOG_TEXT = Object.freeze({
   greeting: GREETING,
   weakMatchNote: WEAK_MATCH_CUE,
@@ -26,7 +26,7 @@ export const AUDIO_CATALOG_TEXT = Object.freeze({
 
 export type CatalogClipId = keyof typeof AUDIO_CATALOG_TEXT;
 
-/** Fixed message clips have catalog identities; fact and topic clips use separate namespaces. */
+/** Fixed messages have catalog identities; facts and topics use separate namespaces. */
 export type CatalogClipReference = Readonly<{
   kind: "catalog";
   id: CatalogClipId;
@@ -50,71 +50,6 @@ export type AssistantClipReference =
   | FactClipReference
   | TopicClipReference;
 export type AssistantClipSequence = readonly AssistantClipReference[];
-
-export type AudioCatalogErrorCode =
-  | "reference/shape-invalid"
-  | "reference/catalog-id-invalid"
-  | "reference/card-id-invalid"
-  | "reference/card-id-reserved"
-  | "source/facts-bytes-invalid"
-  | "source/facts-json-invalid"
-  | "source/facts-shape-invalid"
-  | "source/card-shape-invalid"
-  | "source/card-id-invalid"
-  | "source/card-id-duplicate"
-  | "source/card-answer-empty"
-  | "source/card-topic-empty"
-  | "source/greeting-mismatch"
-  | "source/clip-id-duplicate"
-  | "manifest/clip-invalid"
-  | "manifest/clip-id-duplicate"
-  | "manifest/clip-id-unknown"
-  | "manifest/coverage-mismatch";
-
-/** A closed, content-free failure code for inventory and clip-reference checks. */
-export class AudioCatalogError extends Error {
-  readonly code: AudioCatalogErrorCode;
-
-  constructor(code: AudioCatalogErrorCode) {
-    super(code);
-    this.name = "AudioCatalogError";
-    this.code = code;
-  }
-}
-
-const SAFE_CARD_ID = /^[a-z0-9][a-z0-9-]{0,63}(?![\s\S])/;
-
-function invalid(code: AudioCatalogErrorCode): never {
-  throw new AudioCatalogError(code);
-}
-
-/** Stable ID mapping shared by runtime references and the local corpus tools. */
-export function assistantClipId(reference: AssistantClipReference): string {
-  if (typeof reference !== "object" || reference === null) {
-    return invalid("reference/shape-invalid");
-  }
-
-  if (reference.kind === "catalog") {
-    if (typeof reference.id !== "string" || !Object.hasOwn(AUDIO_CATALOG_TEXT, reference.id)) {
-      return invalid("reference/catalog-id-invalid");
-    }
-    if (reference.id === "greeting") return "greeting";
-    const kebabKey = reference.id.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
-    return `message--${kebabKey}`;
-  }
-
-  if (reference.kind === "fact" || reference.kind === "topic") {
-    if (reference.cardId === "greeting") return invalid("reference/card-id-reserved");
-    if (
-      typeof reference.cardId !== "string" ||
-      !SAFE_CARD_ID.test(reference.cardId) ||
-      reference.cardId.includes("--")
-    ) return invalid("reference/card-id-invalid");
-    return reference.kind === "fact" ? reference.cardId : `topic--${reference.cardId}`;
-  }
-
-  return invalid("reference/shape-invalid");
-}
 
 function catalogClip(id: CatalogClipId): CatalogClipReference {
   return Object.freeze({ kind: "catalog", id, text: AUDIO_CATALOG_TEXT[id] });

@@ -6,7 +6,7 @@
  * live here rather than inside a component closure.
  */
 import type { Answer, ClarificationChoice, VoiceEngine } from "./engine.ts";
-import { createAudioSequence, createGreetingSequence, type AssistantClipSequence } from "./audio-catalog.ts";
+import { createAudioSequence, createGreetingSequence, type AssistantClipSequence } from "./speech-plan.ts";
 import { GREETING } from "./cv-context.ts";
 import { describeReply, type ReplyView } from "./replies.ts";
 

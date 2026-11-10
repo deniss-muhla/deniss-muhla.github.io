@@ -135,3 +135,15 @@ test("short utterances emit no decoder events and a 480 ms utterance releases or
   for (let i = 0; i < 50; i++) gate.push(frame(0));
   assert.equal(emitted.filter(event => event.type === "end").length, 1);
 });
+
+test("voiced gate rejects 449 ms and admits 450 ms even with silence", async () => {
+  const { createMinimumVoicedGate } = await import("../src/chat/stt/whistle/utterance.ts");
+  const gate = createMinimumVoicedGate();
+  const voice = new Float32Array(7184).fill(0.1);
+  const silence = new Float32Array(1600);
+  assert.deepEqual(gate.push([{ type: "start" }, { type: "chunk", samples: voice }, { type: "chunk", samples: silence }]), []);
+  assert.deepEqual(gate.push([{ type: "end" }]), []);
+  assert.deepEqual(gate.push([{ type: "start" }, { type: "chunk", samples: voice }, { type: "chunk", samples: silence }]), []);
+  const last = new Float32Array(16).fill(0.1);
+  assert.deepEqual(gate.push([{ type: "chunk", samples: last }]), [{ type: "start" }, { type: "chunk", samples: voice }, { type: "chunk", samples: silence }, { type: "chunk", samples: last }]);
+});

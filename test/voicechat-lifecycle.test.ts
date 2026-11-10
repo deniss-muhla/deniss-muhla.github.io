@@ -18,7 +18,7 @@ import { runInNewContext } from "node:vm";
 import test from "node:test";
 import ts from "typescript";
 
-import { AUDIO_CATALOG_TEXT, type AssistantClipSequence } from "../src/chat/audio-catalog.ts";
+import { AUDIO_CATALOG_TEXT, type AssistantClipSequence } from "../src/chat/speech-plan.ts";
 import { GREETING, INTRO } from "../src/chat/cv-context.ts";
 import { VoiceEngine, type Answer, type AskOptions, type ClarificationChoice } from "../src/chat/engine.ts";
 import { createTurnFlow, type Message } from "../src/chat/turn.ts";
@@ -368,7 +368,6 @@ type VoiceChatMountOptions = {
   captureSttRegistration?: boolean;
   captureGreetingEffect?: boolean;
   traceCalls?: unknown[][];
-  audioCacheState?: string;
 };
 
 function mockElements(tree: unknown): MockElement[] {
@@ -451,12 +450,6 @@ function mountVoiceChat(
       voiceEngine,
     },
     "./transcript": { mergeTranscript: (left: string, right: string) => [left, right].filter(Boolean).join(" ") },
-    "../offline/audio-cache": {
-      describeAudioCacheProgress: () => "Audio cache status with observed counts",
-      INITIAL_AUDIO_CACHE_PROGRESS: { state: options.audioCacheState ?? "idle", verifiedClips: 0, totalClips: 122, canRetry: false },
-      requestAudioCacheWarm: () => Promise.resolve(),
-      subscribeAudioCacheProgress: () => () => undefined,
-    },
     "./turn": { createTurnFlow },
     "./VoiceChat.module.css": { default: styles },
   };
@@ -495,9 +488,9 @@ function mountVoiceChat(
     sttRegistrationEffect();
   };
   const voiceDraftState = () => ({
-    finalized: refSlots[10]?.current,
-    interim: refSlots[11]?.current,
-    activeUserMessage: refSlots[12]?.current,
+    finalized: refSlots[11]?.current,
+    interim: refSlots[12]?.current,
+    activeUserMessage: refSlots[13]?.current,
   });
   const runGreetingEffect = (): void => {
     assert.ok(greetingEffect, "the targeted greeting effect was captured");
@@ -1362,14 +1355,6 @@ test("playback admission failure has a safe output notice, not a recognition not
 });
 
 
-test("generated speech does not advertise or warm prerecorded clips", () => {
-  const chat = mountVoiceChat(componentSourceForTest(), {}, () => undefined);
-  const tree = mockElements(chat.render());
-  assert.equal(tree.some(e => e.props["data-testid"] === "voice-audio-cache-status"), false);
-  assert.equal(tree.some(e => e.props.children === "Retry audio download"), false);
-});
-
-
 test("master mute remains available while typed Replay is preparing, before actual speech", async () => {
   let finish!: () => void;
   let current!: () => boolean;
@@ -1909,6 +1894,9 @@ test("short voice transcripts are discarded silently while two-word entries are 
   handlers.onUtteranceStart?.(); handlers.onText?.("go on"); handlers.onUtteranceEnd?.(); await settle();
   assert.ok(chat.messages().some(m => m.role === "user" && m.text === "go on" && !m.pending));
   assert.ok(suggestions > 0);
+  await new Promise(resolve => setTimeout(resolve, 450));
+  await settle();
+  assert.match(JSON.stringify(chat.render()), /No entry matched that question/);
   (find("voice-fab")!.props.onClick as () => void)();
 });
 

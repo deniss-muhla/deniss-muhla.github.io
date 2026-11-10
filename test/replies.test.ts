@@ -15,7 +15,7 @@ import {
   describeReply,
   MODEL_STORAGE_CLEARED_NOTICE,
 } from "../src/chat/replies.ts";
-import { AUDIO_CATALOG_TEXT } from "../src/chat/audio-catalog.ts";
+import { AUDIO_CATALOG_TEXT } from "../src/chat/speech-plan.ts";
 import { WEAK_MATCH_CUE, type Answer } from "../src/chat/retrieval/controller.ts";
 
 type AnswerResult = Extract<Answer, { kind: "answer" }>;

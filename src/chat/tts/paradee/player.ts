@@ -24,7 +24,12 @@ export class ParadeePlayer {
         cleanup();
         if (event.data.ready) resolve(); else reject(new Error("Speech model unavailable"));
       };
-      const error = () => { cleanup(); reject(new Error("Speech model unavailable")); };
+      const error = () => {
+        cleanup();
+        worker.terminate();
+        if (this.worker === worker) this.worker = null;
+        reject(new Error("Speech model unavailable"));
+      };
       worker.addEventListener("message", message);
       worker.addEventListener("error", error);
       worker.postMessage({ id: -1, prepare: true });

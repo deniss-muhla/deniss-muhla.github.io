@@ -1,4 +1,4 @@
-import type { AssistantClipSequence } from "./audio-catalog.ts";
+import type { AssistantClipSequence } from "./speech-plan.ts";
 
 export type PlaybackPauseOutcome = "active" | "ended" | "cancelled" | "failed";
 

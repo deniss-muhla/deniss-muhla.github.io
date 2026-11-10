@@ -48,6 +48,7 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
   const utteranceActiveRef = useRef(false);
   const selectSuggestionRef = useRef<(answer: SelectedAnswer) => void>(() => undefined);
   const suggestionRevision = useRef(0);
+  const suggestionIsVoice = useRef(false);
   const suggestionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearSuggestions = useCallback(() => {
     suggestionRevision.current++;
@@ -58,6 +59,7 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
   }, []);
   const updateSuggestions = useCallback((text: string, voiceFinished = false, voice = false) => {
     clearSuggestions();
+    suggestionIsVoice.current = voice;
     const revision = suggestionRevision.current;
     if (voice && (text.match(/[\p{L}\p{N}]/gu) ?? []).length < 3) return;
     const initial = voiceEngine.suggest(text);
@@ -74,7 +76,10 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
           return;
         }
         void voiceEngine.suggest(text, true).then((ranked) => {
-          if (revision === suggestionRevision.current && openRef.current) setSuggestions(ranked);
+          if (revision === suggestionRevision.current && openRef.current) {
+            setSuggestions(ranked);
+            if (voiceFinished && ranked.length === 0) setNotice("No entry matched that question. Try rephrasing it.");
+          }
         }).catch(() => undefined);
       }).catch(() => undefined);
     }, 400);
@@ -208,6 +213,10 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
   selectSuggestionRef.current = (answer) => {
     if (!openRef.current || utteranceActiveRef.current) return;
     clearSuggestions();
+    if (!suggestionIsVoice.current && input.trim()) {
+      appendMessage("user", input.trim());
+      setInput("");
+    }
     setAsked(true);
     setChoices(null);
     setRetryOf(null);

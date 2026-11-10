@@ -27,6 +27,7 @@ const SHELL_CACHE = `cv-shell-${VERSION}`;
 const ASSET_CACHE = `cv-assets-${VERSION}`;
 const VENDOR_CACHE = `cv-vendor-${VERSION}`;
 const KNOWN_CACHES = new Set([SHELL_CACHE, ASSET_CACHE, VENDOR_CACHE]);
+// Retain the former audio prefix to prune caches from older releases.
 const OWNED_CACHE_PREFIXES = ["cv-shell-", "cv-assets-", "cv-audio-", "cv-vendor-"];
 
 const SHELL_URLS = ["/", "/index.html", "/favicon.svg"];

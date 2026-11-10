@@ -2,8 +2,7 @@
 
 The pinned third-party runtime inventory lives in `scripts/model-assets.mjs`: one entry per file with its
 same-origin route, byte count, sha256, source URL and license. Runtime assets are copied from the
-external cache `~/.cache/cv-assistant/model-assets/` into `dist/`. Kitten generation uses explicit
-external runtime/model inputs and adds no model files to the site. None of those runtime/model files is
+external cache `~/.cache/cv-assistant/model-assets/` into `dist/`. None of those runtime/model files is
 committed to git. The byte counts below are pinned inventory values, not a total for the production build.
 
 ## Embedding model
@@ -32,18 +31,6 @@ The files are served byte for byte from the installed `onnxruntime-web` package 
 license.
 
 Project: `https://github.com/microsoft/onnxruntime`.
-
-## Kitten-generated assistant audio provenance
-
-The former v2 assistant corpus, removed on this branch, was prepared with the pinned local `kittenml` SDK 0.9.4 source
-(commit `8ed679c08e0976b236bd5d0dc4ec9ddd98b0da98`, archive SHA-256 recorded in
-`scripts/cv-audio/kitten-pins.json`; SDK license: Apache-2.0) and the pinned
-`KittenML/kitten-tts-2` model revision `f2eee74f4467855ad58fe16f1fb7b7df473263fd`.
-The pin metadata identifies the model license as the Stellon Labs Community License. A pinned
-Chatterbox-Turbo decoder asset is also used by the local adapter. The SDK and model terms are
-distinct; this provenance record does not assess the model/decoder terms or establish permission
-to publicly distribute generated audio. No legal clearance or publication acceptance is claimed.
-The SDK, weights, decoder and runtime roots remain external and are not included in the site.
 
 ## Fonts
 

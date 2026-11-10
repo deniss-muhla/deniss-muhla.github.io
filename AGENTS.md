@@ -71,9 +71,7 @@ The assistant speaks on device with Paradee v1.1 using pinned same-origin assets
 suggestions immediately, ranking keys before topic before answer, and exact before prefix before
 fuzzy matches within each field. Voice capture waits for Paradee preparation; utterances require
 450 ms total voiced audio and at least three transcript letters or digits. It auto-reads a single
-voice candidate after the speech debounce. There is no prerecorded
-corpus or facts/audio serving guard. Kitten and `cv:audio` tooling remain legacy and are not used
-by the runtime or build. For local smoke checks see `scripts/linux`, `scripts/macos` and
+voice candidate after the speech debounce. For local smoke checks see `scripts/linux`, `scripts/macos` and
 `scripts/assistant-smoke.cjs`.
 
 Git recovers committed tracked files, not uncommitted edits. Preserve current owner changes and do

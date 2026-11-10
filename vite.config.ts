@@ -130,8 +130,7 @@ function onnxRuntimeBuildPlugin(): Plugin {
 
 /**
  * The self-hosted model and font assets are served from the external cache in development.
- * Production emits the pinned retrieval, Whistle and font sets. The explicit Kitten stage
- * command uses its external runtime inputs and never loads this site config.
+ * Production emits the pinned retrieval, speech and font sets.
  *
  * `scripts/model-assets.mjs` pins every file (route, bytes, sha256, source, license) and
  * `scripts/fetch-model-assets.mjs` keeps the verified bytes in

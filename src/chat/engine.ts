@@ -20,7 +20,7 @@ import { rankLiveCards } from "./retrieval/live-ranking.ts";
 import type { SttTranscriber, TranscriptLine } from "./stt/whistle/index.ts";
 
 import type { AnswerAudioPlayer } from "./answer-audio.ts";
-import type { AssistantClipSequence } from "./audio-catalog.ts";
+import type { AssistantClipSequence } from "./speech-plan.ts";
 import { createSpeechOutput, type SpeechOutput, type SpeechOutputOptions } from "./speech-output.ts";
 import {
   createRetrievalController,

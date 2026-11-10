@@ -1,5 +1,5 @@
 import type { PlaybackPause, AnswerAudioPlayer } from "./answer-audio.ts";
-import type { AssistantClipSequence } from "./audio-catalog.ts";
+import type { AssistantClipSequence } from "./speech-plan.ts";
 
 const SPEECH_OUTPUT_ERROR = "Speech audio could not be played.";
 

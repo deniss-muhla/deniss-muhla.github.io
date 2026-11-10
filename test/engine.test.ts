@@ -14,7 +14,7 @@ import test from "node:test";
 
 import type { Answer, VoiceEngine as VoiceEngineInstance } from "../src/chat/engine.ts";
 import type { AnswerAudioPlayer } from "../src/chat/answer-audio.ts";
-import type { AssistantClipSequence } from "../src/chat/audio-catalog.ts";
+import type { AssistantClipSequence } from "../src/chat/speech-plan.ts";
 import {
   createRetrievalController,
   WEAK_MATCH_CUE,

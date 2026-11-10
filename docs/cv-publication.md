@@ -23,8 +23,7 @@ CV supplies its claims, not sibling notes, websites, job descriptions or recolle
 
 ## Derived artifacts
 
-The assistant uses in-browser Paradee speech; it does not serve a prerecorded corpus or use a
-facts/audio pair guard. See [audio pipeline](audio-pipeline.md).
+The assistant synthesizes speech in the browser using Paradee.
 
 - `resources/cv/facts.json` is the answer index kept beside the CV. Its atomic and perspective
   cards contain reviewed answers, source line references and stored vectors, not a full CV copy.
@@ -40,12 +39,12 @@ facts/audio pair guard. See [audio pipeline](audio-pipeline.md).
 
 Use the [facts interface](../.github/skills/cv-facts/SKILL.md#current-command-interface) and
 [CV-update workflow](../.github/skills/cv-update/references/workflow.md) for authoring, review and
-embedding. Legacy Kitten audio tooling is not used by the runtime or build.
+embedding.
 
 ## Authority and acceptance
 
 An offline check proves shape, provenance and identity, not truth or retrieval quality. Source
-review requires an independent reviewer and a record. A PDF build does not generate the answer index. The exact model, SDK and decoder pins must remain intact unless a separate
+review requires an independent reviewer and a record. A PDF build does not generate the answer index. The active model and runtime pins must remain intact unless a separate
 owner decision changes them. Their terms are distinct; [third-party provenance](third-party.md)
 is not permission to distribute generated audio.
 
