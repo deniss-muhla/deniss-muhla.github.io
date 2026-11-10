@@ -16,7 +16,7 @@ import { crossOriginIsolationHeaders, onnxRuntimeServePlugin } from "../vite.con
 export const MODEL_TIMEOUT_MS = 240_000;
 export const QUERY_TIMEOUT_MS = 60_000;
 export const SMOKE_OUTER_TIMEOUT_SECONDS = 400;
-export const FROZEN_CV_SHA256 = "b10d675e9dd83f700b69e8caf8a091de3e5173c685947e91fc5041f0095c37b8";
+export const FROZEN_CV_SHA256 = "a15abafe24c276ab4056a9e474147b71d594961afbc9f3b9ba9b3ccb1b873156";
 
 /**
  * The only names a failure may carry. `source` gates the canonical CV bytes, `index` the

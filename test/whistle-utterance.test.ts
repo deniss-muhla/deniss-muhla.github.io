@@ -95,3 +95,43 @@ test("the same phrase in a later spoken utterance is still accepted", async () =
   assert.equal(h.lines.filter(line => line === "same phrase").length, 2);
   await h.stt.stop();
 });
+
+test("minimum voiced gate discards short bursts and releases a qualifying prefix once", async () => {
+  const { createMinimumVoicedGate } = await import("../src/chat/stt/whistle/utterance.ts");
+  const gate = createMinimumVoicedGate();
+  const short = new Float32Array(3200).fill(0.1);
+  assert.deepEqual(gate.push([{ type: "start" }, { type: "chunk", samples: short }, { type: "end" }]), []);
+  const first = new Float32Array(3200).fill(0.1);
+  const quiet = new Float32Array(3200);
+  const second = new Float32Array(4160).fill(0.2);
+  assert.deepEqual(gate.push([{ type: "start" }, { type: "chunk", samples: first }, { type: "chunk", samples: quiet }]), []);
+  const released = gate.push([{ type: "chunk", samples: second }]);
+  assert.deepEqual(released, [{ type: "start" }, { type: "chunk", samples: first }, { type: "chunk", samples: quiet }, { type: "chunk", samples: second }]);
+  assert.deepEqual(gate.push([{ type: "end" }]), [{ type: "end" }]);
+});
+
+test("short utterances emit no decoder events and a 480 ms utterance releases ordered pre-roll once", async () => {
+  const { createPlaybackAdmission } = await import("../src/chat/stt/whistle/continuation.ts");
+  const emitted: import("../src/chat/stt/whistle/utterance.ts").UtteranceEvent[] = [];
+  let onsets = 0, starts = 0;
+  const gate = createPlaybackAdmission({
+    isCurrent: () => true, pausePlaying: () => null,
+    onOnset: () => { onsets++; }, onAdmittedStart: () => { starts++; },
+    deliver: events => { emitted.push(...events); }, onError: () => assert.fail("unexpected playback error"),
+  });
+  const frame = (value: number) => new Float32Array(320).fill(value);
+  for (const count of [5, 15]) {
+    for (let i = 0; i < count; i++) gate.push(frame(0.1));
+    for (let i = 0; i < 50; i++) gate.push(frame(0));
+  }
+  assert.equal(onsets, 2); assert.equal(starts, 0); assert.equal(emitted.length, 0);
+  for (let i = 0; i < 10; i++) gate.push(frame(0));
+  const voice = Array.from({ length: 24 }, (_, i) => frame(0.1 + i / 1000));
+  for (const piece of voice) gate.push(piece);
+  assert.equal(starts, 1);
+  assert.equal(emitted.filter(event => event.type === "start").length, 1);
+  const decoded = emitted.flatMap(event => event.type === "chunk" ? [...event.samples] : []);
+  assert.deepEqual(decoded, [...new Float32Array(2240), ...voice.flatMap(piece => [...piece])]);
+  for (let i = 0; i < 50; i++) gate.push(frame(0));
+  assert.equal(emitted.filter(event => event.type === "end").length, 1);
+});

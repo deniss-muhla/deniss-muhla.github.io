@@ -8,6 +8,7 @@ export class ParadeePlayer {
   private nativeTail: Promise<void> = Promise.resolve();
   private pending: ((error: Error) => void) | null = null;
   private preparing: Promise<void> | null = null;
+  private held = false;
 
   private getWorker(): Worker {
     return this.worker ??= new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
@@ -33,6 +34,7 @@ export class ParadeePlayer {
 
   stop(): void {
     this.generation++;
+    this.held = false;
     this.source?.stop();
     this.source = null;
     this.pending?.(new Error("cancelled"));
@@ -43,19 +45,22 @@ export class ParadeePlayer {
 
   pausePlaying(): PlaybackPause | null {
     const context = this.context;
-    if (!context || !this.source) return null;
+    if (!context || (!this.source && !this.pending) || context.state !== "running" || this.held) return null;
+    this.held = true;
     const id = this.generation;
     const source = this.source;
     let failed = false;
     const outcome = (): PlaybackPauseOutcome => failed ? "failed" : this.generation !== id ? "cancelled"
-      : this.source !== source ? "ended" : "active";
+      : source ? (this.source !== source ? "ended" : "active")
+      : (this.pending || this.source ? "active" : "ended");
     const isCurrent = () => outcome() === "active";
-    const ready = context.suspend().catch(() => { failed = true; this.stop(); throw new Error("Speech audio could not be paused."); });
+    const ready = Promise.resolve().then(() => context.suspend()).catch(() => { failed = true; this.stop(); throw new Error("Speech audio could not be paused."); });
     this.nativeTail = ready;
     void ready.catch(() => undefined);
     return { ready, isCurrent, outcome, resume: async () => {
       await ready;
-      if (!isCurrent()) return;
+      if (!isCurrent()) { this.held = false; return; }
+      this.held = false;
       const resuming = context.resume();
       this.nativeTail = resuming;
       try { await resuming; } catch { failed = true; this.stop(); throw new Error("Speech audio could not be resumed."); }
@@ -65,6 +70,7 @@ export class ParadeePlayer {
   async speak(text: string, context: AudioContext): Promise<void> {
     this.stop();
     const id = this.generation;
+    this.context = context;
     const worker = this.getWorker();
     const samples = await new Promise<Float32Array>((resolve, reject) => {
       this.pending = reject;
@@ -78,6 +84,16 @@ export class ParadeePlayer {
       worker.postMessage({ id, text });
     });
     if (id !== this.generation) return;
+    // Bound model peaks to reduce clipping and acoustic leakage without boosting quiet speech.
+    let peak = 0;
+    for (const sample of samples) {
+      if (!Number.isFinite(sample)) throw new Error("Invalid speech waveform");
+      peak = Math.max(peak, Math.abs(sample));
+    }
+    if (peak > 0.8) {
+      const gain = 0.8 / peak;
+      for (let i = 0; i < samples.length; i++) samples[i] *= gain;
+    }
     const latency = [context.baseLatency, context.outputLatency].reduce((sum, value) =>
       sum + (Number.isFinite(value) && value > 0 ? value : 0), 0);
     const before = Math.ceil((0.12 + latency) * 24000);

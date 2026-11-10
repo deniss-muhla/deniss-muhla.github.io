@@ -12,9 +12,10 @@ nothing here embeds the CV into a prompt.
 - `scoring.ts` embeds nothing. It takes one query vector and returns every card with its
   cosine, ranked by score then card id. There is no keyword or alias pre-filter, so the
   caller sees the full candidate set.
-- `live-suggestions.ts` promotes an exact reviewed workplace perspective for explicit ordinal,
-  count or employer-technology queries. This applies only to live suggestions; ordinary answer
-  selection retains the cosine thresholds and margin.
+- `live-ranking.ts` ranks live suggestions on every keystroke. Fields rank tags and keywords,
+  then topic, then answer text; within a field an exact match beats a prefix match (three or
+  more letters), which beats a bounded fuzzy match. A ready encoder only breaks ties. Ordinary
+  answer selection retains the cosine thresholds and margin.
 - `selection.ts` applies the relevance floor, the confidence threshold and the margin in the
   order of design decision 9. The three constants are calibrated once against the named
   synthetic cases from the external probe and are recorded next to them.

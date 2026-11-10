@@ -82,3 +82,45 @@ export function latestFrameHasSound(samples: Float32Array): boolean {
   for (let index = offset; index < samples.length; index++) energy += samples[index] ** 2;
   return samples.length > offset && Math.sqrt(energy / (samples.length - offset)) >= MIN_RMS;
 }
+
+// Accumulate voiced audio across pauses, before any decoder work is sent.
+export const MIN_VOICED_MILLISECONDS = 450;
+const MIN_VOICED_SAMPLES = SAMPLE_RATE * MIN_VOICED_MILLISECONDS / 1000;
+
+export function createMinimumVoicedGate(): { push(events: UtteranceEvent[]): UtteranceEvent[] } {
+  let retained: UtteranceEvent[] = [];
+  let voiced = 0;
+  let admitted = false;
+  return {
+    push(events) {
+      const output: UtteranceEvent[] = [];
+      for (const event of events) {
+        if (event.type === "start") {
+          retained = [event];
+          voiced = 0;
+          admitted = false;
+        } else if (event.type === "chunk") {
+          if (admitted) output.push(event);
+          else {
+            retained.push(event);
+            for (let offset = 0; offset < event.samples.length; offset += FRAME_SAMPLES) {
+              const frame = event.samples.subarray(offset, offset + FRAME_SAMPLES);
+              if (latestFrameHasSound(frame)) voiced += frame.length;
+            }
+            if (voiced >= MIN_VOICED_SAMPLES) {
+              output.push(...retained);
+              retained = [];
+              admitted = true;
+            }
+          }
+        } else {
+          if (admitted) output.push(event);
+          retained = [];
+          admitted = false;
+          voiced = 0;
+        }
+      }
+      return output;
+    },
+  };
+}

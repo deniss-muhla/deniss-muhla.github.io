@@ -35,9 +35,10 @@ These hints do not change retrieval or establish improved recognition.
 ## Consent and turn lifecycle
 
 An explicit opener click or keyboard action opens/reopens unmuted live voice. Its name and
-tooltip identify microphone and audio intent. This fresh consent action resumes audio, starts
-STT/microphone capture and speaks the stored greeting once through the guarded voice-start
-path. Page load while closed does not resume audio, request the microphone or autoplay.
+tooltip identify microphone and audio intent. This fresh consent action resumes audio, awaits
+Paradee preparation, starts STT/microphone capture and speaks the stored greeting once through
+the guarded voice-start path. If speech preparation fails, voice startup reports the failure and
+typing remains available. Page load while closed does not resume audio, request the microphone or autoplay.
 There is no mode picker or text Enable/Continue step. Typing is immediately usable during
 loading, permission and startup, and when live voice or semantic matching fails. Safe notices
 distinguish input and audio failures. Typed submissions use the existing answer flow. Live typed and spoken drafts instead request up
@@ -46,7 +47,7 @@ prioritizes keys (tags), then topic, then answer; within each field exact tokens
 and fuzzy matches. Workplace, employment and ordinal query aliases match within those same fields,
 weaker than literal exact matches and without promoting any particular card. When the encoder is ready, semantic scores can break lexical ties after a quiet
 period. A single voice candidate is read after 400 ms. New input cancels pending suggestions and speech.
-A completed voice entry with one eligible candidate is spoken automatically; otherwise selecting a
+A completed voice entry with at least three letters or digits and one eligible candidate is spoken automatically; otherwise selecting a
 suggestion shows its answer and requests speech, subject to mute.
 Without audio approval, answers stay silent while retaining their stored Replay plan.
 
@@ -91,19 +92,21 @@ log secrets, raw transcripts/answers or unsafe model internals.
 
 ## Playback and interruption
 
-The player preserves decoded samples and adds zero-filled padding: 120 ms before and 200 ms
+The player attenuates waveform peaks above 0.8 to reduce clipping and acoustic leakage, without
+boosting quieter audio. It rejects non-finite samples and adds zero-filled padding: 120 ms before and 200 ms
 after, plus finite positive browser `baseLatency` and `outputLatency` on each side. Unsupported
-readings retain the minimum padding. Padding neither changes clip bytes nor fixes missing
-recognition/audio or endpoint splits.
+readings retain the minimum padding. Padding does not fix missing recognition/audio or endpoint splits.
 
 During generated playback, onset pauses output while capture stays live. After
 200 ms, continuation requires the latest received 20-ms frame to have RMS at least 0.008
-and receipt age 0–20 ms inclusive. Continued activity stops the paused reply and admits the
-complete retained pre-roll/opening window once. Quiet, absent or stale activity rejects the
-burst: no question, the same source position resumes and microphone capture stays
-live. Idle/preparing/inference onset interrupts immediately. Ordinary 80-ms onset, one-second
-quiet end and basic browser echo cancellation are unchanged. Cancel/close/mute/reset must
-invalidate late resume/start/tail work.
+and receipt age 0–20 ms inclusive. Continued activity remains held until the utterance has
+accumulated 450 ms of voiced frames, including across short pauses. The player can also hold
+pending synthesis before a source exists. Quiet, absent, stale or sub-threshold activity rejects
+the burst without decoder work or a question; the same source position resumes and capture
+stays live. A qualifying utterance interrupts the reply and releases the retained pre-roll and
+opening once. The 80-ms acoustic onset, one-second quiet end and basic browser echo cancellation
+are unchanged. A finalized transcript with fewer than three letters or digits is silently discarded.
+Cancel/close/mute/reset must invalidate late resume/start/tail work.
 
 Microphone capture and speech output own separate AudioContexts. Suspending output must not
 suspend input. Confirmed admission delivers the retained prefix once, in order, through decoder

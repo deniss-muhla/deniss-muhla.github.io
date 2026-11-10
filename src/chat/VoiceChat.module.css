@@ -448,8 +448,12 @@
   transition: background 160ms ease;
 }
 
-.choice:hover {
-  background: var(--chat-surface);
+.choice:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--chat-text) 10%, var(--chat-surface));
+}
+
+.choice:active:not(:disabled) {
+  background: color-mix(in srgb, var(--chat-text) 20%, var(--chat-surface));
 }
 
 .replay {
@@ -633,7 +637,7 @@
   outline: 2px solid var(--chat-text);
   outline-offset: 2px;
 }
-.replay:disabled, .send:disabled {
+.choice:disabled, .replay:disabled, .send:disabled {
   color: var(--chat-text);
   border-style: dashed;
   cursor: not-allowed;

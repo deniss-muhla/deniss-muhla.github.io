@@ -56,10 +56,10 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
     voiceEngine.stopAudio();
     setSuggestions([]);
   }, []);
-  const updateSuggestions = useCallback((text: string, voiceFinished = false) => {
+  const updateSuggestions = useCallback((text: string, voiceFinished = false, voice = false) => {
     clearSuggestions();
     const revision = suggestionRevision.current;
-    if (!text.trim()) return;
+    if (voice && (text.match(/[\p{L}\p{N}]/gu) ?? []).length < 3) return;
     const initial = voiceEngine.suggest(text);
     void initial.then((items) => {
       if (revision === suggestionRevision.current && openRef.current) setSuggestions(items);
@@ -274,8 +274,11 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
     utteranceActiveRef.current = false;
     if (!openRef.current || voiceModeRef.current !== "live" || mutedRef.current) return;
     const question = currentTurnText().trim();
-    if (!question) {
+    if ((question.match(/[\p{L}\p{N}]/gu) ?? []).length < 3) {
       resetTurnText();
+      clearSuggestions();
+      if (activeUserMessageRef.current !== null) removeMessage(activeUserMessageRef.current);
+      activeUserMessageRef.current = null;
       return;
     }
 
@@ -289,8 +292,8 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
       updateMessage(userMessageId, { text: question, pending: false });
     }
 
-    updateSuggestions(question, true);
-  }, [currentTurnText, dismissStarters, resetTurnText, updateMessage, updateSuggestions]);
+    updateSuggestions(question, true, true);
+  }, [clearSuggestions, currentTurnText, dismissStarters, removeMessage, resetTurnText, updateMessage, updateSuggestions]);
 
   const handleSend = useCallback(
     (event: FormEvent) => {
@@ -329,7 +332,7 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
         const trimmed = text.trim();
         if (trimmed) dismissStarters();
         interimTurnRef.current = trimmed;
-        updateSuggestions(currentTurnText());
+        updateSuggestions(currentTurnText(), false, true);
         const combined = currentTurnText();
         if (combined) renderTurnBubble(combined);
         else if (activeUserMessageRef.current !== null) {
@@ -351,7 +354,7 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
         finalizedTurnRef.current = mergeTranscript(finalizedTurnRef.current, trimmed);
         interimTurnRef.current = "";
         renderTurnBubble(currentTurnText());
-        updateSuggestions(currentTurnText());
+        updateSuggestions(currentTurnText(), false, true);
       },
       onUtteranceEnd: commitPendingTurn,
       onWarning: (message) => {
@@ -448,6 +451,8 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
       // The opener or explicit voice enable is the consent boundary for audio and STT loading.
       await voiceEngine.resumeAudio();
       if (!isCurrent()) return;
+      await voiceEngine.ensureParadee();
+      if (!isCurrent()) return;
       audioApprovedRef.current = true;
       setAudioApproved(true);
       // Keep capture active during playback so confirmed speech can interrupt it.
@@ -461,7 +466,8 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
         setVoiceMode("typed");
         audioApprovedRef.current = false;
         setAudioApproved(false);
-        setNotice("Audio could not start. Try the voice button again, or type a question.");
+        setNotice("Speech is unavailable. Try the voice button again, or type a question.");
+        setTurn("error");
       }
     } finally {
       if (voiceStartRef.current === request) {
@@ -759,7 +765,7 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
         ) : null}
 
         {suggestions.length > 0 ? <div className={styles.choices} role="group" aria-label="Closest facts" data-testid="live-suggestions">
-          {suggestions.map((item) => <button type="button" key={item.cardId} data-testid="live-suggestion"
+          {suggestions.map((item) => <button type="button" key={item.cardId} className={styles.choice} data-testid="live-suggestion"
             disabled={utteranceActiveRef.current} onClick={() => selectSuggestionRef.current(item)}>{item.topic}</button>)}
         </div> : null}
         <form className={styles.composer} onSubmit={handleSend}>

@@ -199,7 +199,6 @@ const WHISTLE_TERMS = [
   "Security",
   "Senior Front-end Developer",
   "Senior Front-end Engineer",
-  "Senior Front-end JavaScript Application Developer",
   "Server",
   "Service",
   "Software architecture",

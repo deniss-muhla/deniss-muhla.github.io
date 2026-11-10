@@ -96,7 +96,7 @@ test("maps committed deltas and pending text, then consumes the stop tail", asyn
   });
 
   await stt.start();
-  assert.equal(worker.sent.at(-1)?.type, "start");
+  assert.equal(worker.sent.some(message => message.type === "start"), false);
 
   const samples = new Float32Array(16_000).fill(0.1);
   captureChunk?.(samples);
@@ -143,9 +143,11 @@ test("ignores results while closing and accepts results after a settled reopen",
   const worker = new FakeWorker();
   const events: string[] = [];
   let captureStarts = 0;
+  let send!: (samples: Float32Array) => void;
   const stt = await loadStt(worker, {
     captureFactory: async ({ onChunk }) => {
       const thisCapture = captureStarts++;
+      send = onChunk;
       return {
         async stop() {
           if (thisCapture !== 0) return;
@@ -162,6 +164,7 @@ test("ignores results while closing and accepts results after a settled reopen",
   });
 
   await stt.start();
+  send(new Float32Array(8000).fill(0.1));
   worker.emit({
     type: "result",
     json: JSON.stringify({ text: "active line", pending: "active tail" }),
@@ -184,6 +187,7 @@ test("ignores results while closing and accepts results after a settled reopen",
   await stopping;
   await reopening;
   assert.equal(captureStarts, 2);
+  send(new Float32Array(8000).fill(0.1));
   assert.equal(worker.sent.at(-1)?.type, "start");
 
   worker.emit({
@@ -291,6 +295,7 @@ test("reloads a worker that fails during stop before reopening capture", async (
   const workers: FakeWorker[] = [];
   const lines: string[] = [];
   let captures = 0;
+  let send!: (samples: Float32Array) => void;
   const stt = createWhistleStt({
     workerFactory: () => {
       const number = workers.length + 1;
@@ -298,7 +303,8 @@ test("reloads a worker that fails during stop before reopening capture", async (
       workers.push(worker);
       return worker;
     },
-    captureFactory: async () => {
+    captureFactory: async ({ onChunk }) => {
+      send = onChunk;
       captures += 1;
       events.push(`capture:${captures}`);
       return { async stop() {} };
@@ -314,6 +320,7 @@ test("reloads a worker that fails during stop before reopening capture", async (
   first.emit({ type: "ready", loadMs: 1 });
   await loading;
   await stt.start();
+  send(new Float32Array(8000).fill(0.1));
 
   const stopping = stt.stop();
   const reopening = stt.start();
@@ -336,13 +343,13 @@ test("reloads a worker that fails during stop before reopening capture", async (
   events.push("worker:2:ready");
   replacement.emit({ type: "ready", loadMs: 1 });
   await reopening;
-  assert.deepEqual(events.slice(-4), [
+  assert.deepEqual(events.slice(-3), [
     "worker:2:load",
     "worker:2:ready",
-    "worker:2:start",
     "capture:2",
   ]);
-  assert.deepEqual(replacement.sent.map((message) => message.type), ["load", "start"]);
+  assert.deepEqual(replacement.sent.map((message) => message.type), ["load"]);
+  send(new Float32Array(8000).fill(0.1));
 
   replacement.emit({
     type: "result",
@@ -371,7 +378,7 @@ test("stops capture that resolves after worker failure during startup", async ()
 
   const starting = stt.start();
   await captureRequested;
-  assert.equal(worker.sent.at(-1)?.type, "start");
+  assert.equal(worker.sent.at(-1)?.type, "load");
 
   worker.fail();
   worker.emit({
@@ -456,13 +463,15 @@ test("acoustic onset is immediate before a pending stop reply while capture cont
   const quietFrame = new Float32Array(320).fill(0.001);
 
   for (let index = 0; index < 4; index += 1) send(voiceFrame);
-  assert.deepEqual(events, ["onset"], "80 ms gate onset reaches the handler before transcript text");
+  assert.deepEqual(events, [], "80 ms onset does not publish a short candidate");
+  for (let index = 0; index < 19; index += 1) send(voiceFrame);
+  assert.deepEqual(events, ["onset"], "qualifying speech reaches the handler before transcript text");
   assert.equal(captureStops, 0, "onset does not stop the microphone");
 
   for (let index = 0; index < 50; index += 1) send(quietFrame);
   assert.equal(worker.sent.at(-1)?.type, "stop", "the first quiet end is waiting for its decoder reply");
   const startsBeforeNextOnset = worker.sent.filter((message) => message.type === "start").length;
-  for (let index = 0; index < 4; index += 1) send(voiceFrame);
+  for (let index = 0; index < 23; index += 1) send(voiceFrame);
   assert.deepEqual(events, ["onset", "onset"], "the next onset is reported outside the queued stop drain");
   assert.equal(worker.sent.filter((message) => message.type === "start").length, startsBeforeNextOnset, "decoder restart still waits for stop acknowledgement");
   assert.equal(captureStops, 0, "capture continues while decoder work is serialized");
@@ -526,9 +535,9 @@ test("a prior delayed decoder end cannot restart output after a newer acoustic o
     onUtteranceEnd: () => { ends++; },
   });
   await stt.start();
-  send(new Float32Array(1280).fill(0.1));
+  send(new Float32Array(8000).fill(0.1));
   send(new Float32Array(16000));
-  send(new Float32Array(1280).fill(0.2));
+  send(new Float32Array(8000).fill(0.2));
   worker.emit({ type: "result", json: JSON.stringify({ text: "old delayed line" }) });
   worker.emit({ type: "stopped", json: JSON.stringify({ text: "old delayed tail" }) });
   await new Promise<void>((r) => setImmediate(r));
@@ -649,6 +658,8 @@ for (const variant of ["continued", "quiet", "stalled", "obsolete", "late-frame"
     if (variant === "obsolete") valid = false;
     t.mock.timers.tick(variant === "delayed-timer" ? 100 : variant === "late-frame" ? 21 : 20);
     await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    assert.equal(starts, 0, "200ms trial alone does not admit decoding");
+    if (variant === "continued") for (let i = 0; i < 18; i++) deliver(0.2);
     assert.equal(starts, variant === "continued" ? 1 : 0);
     assert.equal(resumes, ["quiet", "stalled", "late-frame", "delayed-timer"].includes(variant) ? 1 : 0);
     if (variant === "continued") {
@@ -685,7 +696,7 @@ test("a new utterance during delayed rejected-burst resume is not lost", async (
   t.mock.timers.tick(180); send(new Float32Array(320)); t.mock.timers.tick(20);
   await Promise.resolve(); await Promise.resolve();
   assert.ok(release, "the native resume is pending");
-  const prefix = new Float32Array(1280).fill(0.2);
+  const prefix = new Float32Array(8000).fill(0.2);
   send(prefix);
   assert.equal(starts, 1, "outside playing output the new onset is immediate");
   release(); await Promise.resolve(); await Promise.resolve();
@@ -718,7 +729,8 @@ test("final natural end retains confirmed prefix while native pause readiness is
   t.mock.timers.tick(180); send(0.2); t.mock.timers.tick(20);
   await Promise.resolve();
   assert.equal(starts, 0, "decision retains samples while suspend remains pending");
-  send(0.3); resolve(); await Promise.resolve(); await Promise.resolve();
+  for (let i = 0; i < 18; i++) send(0.3);
+  resolve(); await Promise.resolve(); await Promise.resolve();
   assert.equal(starts, 1);
   assert.deepEqual(delivered, expected, "natural final end never drops confirmed captured prefix");
 });
@@ -742,3 +754,90 @@ for (const cancelled of [false, true]) {
     assert.equal(notices, cancelled ? 0 : 1);
   });
 }
+
+test("short acoustic bursts never start or stop the decoder; a qualifying utterance flushes once", async () => {
+  const worker = new FakeWorker();
+  let send!: (samples: Float32Array) => void;
+  let starts = 0, ends = 0, pauses = 0;
+  const stt = await loadStt(worker, {
+    captureFactory: async ({ onChunk }) => { send = onChunk; return { async stop() {} }; },
+    onPlaybackOnset: () => { pauses++; return null; },
+    onUtteranceStart: () => { starts++; },
+    onUtteranceEnd: () => { ends++; },
+  });
+  await stt.start();
+  for (const duration of [100, 300]) {
+    send(new Float32Array(duration * 16).fill(0.1));
+    send(new Float32Array(16000));
+  }
+  assert.equal(pauses, 2, "80 ms playback onset remains immediate");
+  assert.deepEqual(worker.sent.filter(m => ["start", "chunk", "stop"].includes(m.type)), []);
+  assert.equal(starts, 0); assert.equal(ends, 0);
+  send(new Float32Array(7680).fill(0.1));
+  send(new Float32Array(16000));
+  assert.equal(starts, 1);
+  assert.equal(worker.sent.filter(m => m.type === "start").length, 1);
+  assert.equal(worker.sent.filter(m => m.type === "stop").length, 1);
+  assert.ok(worker.sent.every(m => m.type !== "chunk" || m.samples.length <= 16000));
+  worker.emit({ type: "stopped", json: "" });
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(ends, 1);
+  await stt.stop();
+  assert.equal(worker.sent.filter(m => m.type === "stop").length, 1);
+});
+
+test("continued playback candidate below the minimum resumes without decoder work", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  const worker = new FakeWorker();
+  let send!: (samples: Float32Array) => void;
+  let resumes = 0;
+  const stt = await loadStt(worker, {
+    captureFactory: async ({ onChunk }) => { send = onChunk; return { async stop() {} }; },
+    onPlaybackOnset: () => ({ ready: Promise.resolve(), isCurrent: () => true, outcome: () => "active", resume: async () => { resumes++; } }),
+  });
+  await stt.start();
+  for (let i = 0; i < 4; i++) send(new Float32Array(320).fill(0.1));
+  t.mock.timers.tick(180); send(new Float32Array(320).fill(0.1)); t.mock.timers.tick(20);
+  await Promise.resolve(); await Promise.resolve();
+  send(new Float32Array(3200).fill(0.1));
+  send(new Float32Array(16000));
+  await Promise.resolve();
+  assert.equal(resumes, 1);
+  assert.deepEqual(worker.sent.filter(m => ["start", "chunk", "stop"].includes(m.type)), []);
+  await stt.stop();
+});
+
+test("closing a rejected short candidate does not send a capture tail to the decoder", async () => {
+  const worker = new FakeWorker();
+  let send!: (samples: Float32Array) => void;
+  const stt = await loadStt(worker, {
+    captureFactory: async ({ onChunk }) => {
+      send = onChunk;
+      return { async stop() { onChunk(new Float32Array(320).fill(0.1)); } };
+    },
+  });
+  await stt.start();
+  send(new Float32Array(3200).fill(0.1));
+  await stt.stop();
+  assert.deepEqual(worker.sent.filter(m => ["start", "chunk", "stop"].includes(m.type)), []);
+});
+
+test("confirmed subminimum playback candidate expires when frames stall and timers are cancelled", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"] });
+  let resumes = 0, starts = 0;
+  const pause = { ready: Promise.resolve(), isCurrent: () => true, outcome: () => "active" as const, resume: async () => { resumes++; } };
+  const admission = createPlaybackAdmission({ isCurrent: () => true, pausePlaying: () => pause,
+    onOnset() {}, onAdmittedStart: () => { starts++; }, deliver() {}, onError: () => assert.fail("unexpected failure") });
+  const send = () => admission.push(new Float32Array(320).fill(0.1));
+  for (let i = 0; i < 4; i++) send();
+  t.mock.timers.tick(180); send(); t.mock.timers.tick(20);
+  await Promise.resolve(); await Promise.resolve();
+  t.mock.timers.tick(999); assert.equal(resumes, 0);
+  t.mock.timers.tick(1); await Promise.resolve();
+  assert.equal(resumes, 1); assert.equal(starts, 0);
+  t.mock.timers.tick(5000); assert.equal(resumes, 1);
+  for (let i = 0; i < 4; i++) send();
+  t.mock.timers.tick(180); send(); t.mock.timers.tick(20);
+  await Promise.resolve(); await Promise.resolve();
+  admission.stop(); t.mock.timers.tick(5000); assert.equal(resumes, 1);
+});
