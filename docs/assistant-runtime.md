@@ -3,8 +3,7 @@
 ## Local processing and module boundaries
 
 The assistant runs in the browser: Whistle recognizes speech, the retrieval encoder embeds
-questions for matching against the reviewed index, and the answer-audio player fetches and
-decodes prerecorded v2 MP3 references. No hosted prompt or runtime answer generation is used.
+questions for matching against the reviewed index, and Paradee v1.1 synthesizes speech in a separate module worker. No hosted prompt or runtime answer generation is used.
 Questions and microphone input stay on-device; initial asset/model downloads still need a
 network connection. Whistle and the embedding runtime run single-threaded and do not require
 `SharedArrayBuffer`. Speech input needs a secure context (HTTPS or localhost) and permission.
@@ -12,17 +11,16 @@ network connection. Whistle and the embedding runtime run single-threaded and do
 Keep vendor objects, types and resource lifecycles behind project-owned boundaries:
 
 - `src/chat/stt/whistle` owns the pinned speech adapter/worker, not components.
-- `src/chat/retrieval/encoder` owns `@huggingface/transformers` and `onnxruntime-web` imports.
-  Application/UI code must not import those packages. A model swap must not require UI edits.
+- `src/chat/retrieval/encoder` owns the embedding runtime; `src/chat/tts/paradee` owns the
+  Paradee ONNX runtime and phonemizer. Application/UI code must not import vendor packages.
 - `src/chat/retrieval` selects a prepared answer from `resources/cv/facts.json`; the encoder
   embeds one trimmed question in a module worker. Stored vectors have 384 dimensions.
 - The engine coordinates model loading, progress, selection, playback and interruption.
   Speech recognition, retrieval and speech output have focused modules; do not move their
   resource ownership into components. Components own presentation/interaction state only.
-- `src/chat/answer-audio.ts` owns clip fetch/decode and accepts only source/text-bound v2
-  references. Immutable message plans bind Replay/autoplay to the visible message; no TTS
-  fallback or fresh retrieval on Replay is allowed. Valid stored-plan/cache reuse is expected;
-  direct final-path generation and complete-pair validation rules belong to the audio pipeline.
+- The Paradee adapter synthesizes the text in immutable message plans without fetching clips.
+  Replay uses the stored plan without another retrieval. Failed synthesis surfaces an error and
+  never falls back to another voice. The older clip player is not used by the default engine.
 
 Organize functionality under `src/chat`, `src/offline` and `src/page`, not generic type folders.
 Use explicit project-owned progress/state types across boundaries and narrow vendor adapters.
@@ -42,8 +40,14 @@ STT/microphone capture and speaks the stored greeting once through the guarded v
 path. Page load while closed does not resume audio, request the microphone or autoplay.
 There is no mode picker or text Enable/Continue step. Typing is immediately usable during
 loading, permission and startup, and when live voice or semantic matching fails. Safe notices
-distinguish input and audio failures. Typed and spoken questions use the same retrieval and
-turn cleanup; typed answers follow current audio consent/mute, not a separate typed mode.
+distinguish input and audio failures. Typed submissions use the existing answer flow. Live typed and spoken drafts instead request up
+to three suggestions immediately from the reviewed index, without waiting for the encoder. Ranking
+prioritizes keys (tags), then topic, then answer; within each field exact tokens precede prefixes
+and fuzzy matches. Workplace, employment and ordinal query aliases match within those same fields,
+weaker than literal exact matches and without promoting any particular card. When the encoder is ready, semantic scores can break lexical ties after a quiet
+period. A single voice candidate is read after 400 ms. New input cancels pending suggestions and speech.
+A completed voice entry with one eligible candidate is spoken automatically; otherwise selecting a
+suggestion shows its answer and requests speech, subject to mute.
 Without audio approval, answers stay silent while retaining their stored Replay plan.
 
 The greeting offers three distinct randomly sampled reviewed fact topics in the message area,
@@ -92,11 +96,11 @@ after, plus finite positive browser `baseLatency` and `outputLatency` on each si
 readings retain the minimum padding. Padding neither changes clip bytes nor fixes missing
 recognition/audio or endpoint splits.
 
-During actual prerecorded playback, onset pauses output while capture stays live. After
+During generated playback, onset pauses output while capture stays live. After
 200 ms, continuation requires the latest received 20-ms frame to have RMS at least 0.008
 and receipt age 0–20 ms inclusive. Continued activity stops the paused reply and admits the
 complete retained pre-roll/opening window once. Quiet, absent or stale activity rejects the
-burst: no question, the same source position/clip order resumes and microphone capture stays
+burst: no question, the same source position resumes and microphone capture stays
 live. Idle/preparing/inference onset interrupts immediately. Ordinary 80-ms onset, one-second
 quiet end and basic browser echo cancellation are unchanged. Cancel/close/mute/reset must
 invalidate late resume/start/tail work.
@@ -107,7 +111,7 @@ calls of at most 16,000 samples; do not decode quiet pre-roll separately or dupl
 Flush the bounded decoder remainder and stop-reply tail before utterance-end; stale acoustic
 owners may drain for cleanup but must not commit text or restart output.
 
-Natural final-clip end preserves a current captured admission, but cannot resume ended playback.
+Natural playback end preserves a current captured admission, but cannot resume ended playback.
 Explicit cancellation invalidates the admission instead. Suspend/resume failures route through
 a safe playback-specific notice, not a recognizer/vendor error dump or loss of the chosen answer
 text. Keep failure/currentness ownership separate from normal end and from master mute/close.
@@ -141,12 +145,9 @@ Cache Storage first and loads `needle.js` with `importScripts`. When touching th
 verify actual served bytes in dev and built routing and retain a real fake-microphone
 transcription through the pinned runtime, not only a copied inventory comparison.
 
-The owner-approved CV workflow generates the complete Kitten corpus directly at
-`public/audio/assistant/` from final `resources/cv/facts.json` bytes. The current
-[command interface](audio-pipeline.md#current-command-interface) supports explicit direct-final
-output with model-free coverage. The maintained CLI remains Linux/CUDA only; see the
-audio provenance note there. Legacy external staging remains available but is not the target.
-Runtime models, caches and weights stay outside Git.
+Paradee generates speech locally at runtime. The prerecorded corpus and facts/audio pair guard
+are not used. The facts check remains required. See the [audio pipeline](audio-pipeline.md)
+for runtime and smoke-check limitations.
 
 ## Cache and recovery ownership
 
@@ -158,16 +159,14 @@ on localhost unless `?sw=1` is present.
 
 The worker caches the app shell, same-origin assets, Google Fonts and retrieval ONNX Runtime. Whistle's
 `needle-models-v1` cache and the embedding owner's Cache Storage entry cache their models;
-the worker must not duplicate these downloads. After shell load, it warms the complete
-validated audio manifest and content-hashed clips in a dedicated cache, separate from shared
-asset eviction. Observed verified counts/bytes drive progress and Ready, not completed jobs.
-
-Data Saver skips automatic audio warming. Incomplete/error/offline states stay visible with
-retry/reconnection fetching only missing clips; valid completed clips remain. Completion has
-a concise accessible hint, not a verbose visible count row. All reviewed clips are verified
-before Ready, without needing to play them online first. Audio Ready alone does not mean the
-shell, retrieval model or speech runtime is cached. Offline acceptance must exercise the
-controlled reload and needed models, not infer readiness from one cache.
+the worker must not duplicate these downloads. Paradee owns a revisioned cache for its pinned
+config, tokenizer and model. Its worker verifies size and SHA-256 both before storing and when
+reading those assets, then initializes ONNX from verified bytes. Background prefetch prepares
+speech beside retrieval, except under Data Saver; explicit chat opening starts deferred preparation.
+Speech readiness follows successful preparation, and a failed cold offline load reports that speech
+is unavailable while typing remains usable. The ORT runtime and bundled phonemizer worker use the
+same-origin asset cache. A warm speech model alone does not establish full offline readiness:
+the shell, retrieval and speech-recognition assets must also be available and tested after reload.
 
 Protect service-worker lifecycle, `clients.claim()`, first controlled load and Chrome's offline
 reload behavior at this boundary. Dev, cached production and plain static serving differ;

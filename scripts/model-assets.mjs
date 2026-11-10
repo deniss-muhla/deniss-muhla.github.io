@@ -32,6 +32,19 @@ export const MODEL_ASSETS_SEED_DIR =
  */
 export const MODEL_ASSET_SETS = Object.freeze([
   {
+    id: "sahilmahendrakar-paradee-8m-v1.1",
+    rev: "330617ad1f097b4f6b02c103e54b39006c090b45",
+    route: "/models/sahilmahendrakar/Paradee-8M-v1.1/",
+    source:
+      "https://huggingface.co/sahilmahendrakar/Paradee-8M-v1.1/resolve/330617ad1f097b4f6b02c103e54b39006c090b45",
+    license: "Apache-2.0",
+    files: [
+      { name: "config.json", bytes: 1_774, sha256: "c3f420e8a5aea41b97f698404a1b1e28e403c662f65927345335fc5493f2e075" },
+      { name: "tokenizer.json", bytes: 3_497, sha256: "77a02c8e164413299b4b4c403b14f8e0e1c1b727db4d46a09d6327b861060a34" },
+      { name: "onnx/paradee_int8.onnx", bytes: 8_461_438, sha256: "665c3cce6d9872e24bd43db4aa19d3b9c224cdeb6d79b0814190e1c2e43defbc" },
+    ],
+  },
+  {
     id: "mxbai-embed-xsmall-v1",
     rev: "e6ac24e5d6efb8782b59de1647b3ececb4ece94e",
     route: "/models/mixedbread-ai/mxbai-embed-xsmall-v1/",

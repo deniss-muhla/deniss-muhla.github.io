@@ -11,6 +11,12 @@ importers:
       '@huggingface/transformers':
         specifier: 4.3.0
         version: 4.3.0(@types/node@24.12.0)
+      onnxruntime-web:
+        specifier: 1.31.0-dev.20260914-8d85527a0
+        version: 1.31.0-dev.20260914-8d85527a0
+      phonemizer:
+        specifier: 1.2.1
+        version: 1.2.1
       react:
         specifier: ^19.2.4
         version: 19.2.4
@@ -1213,6 +1219,9 @@ packages:
 
   pend@1.2.0:
     resolution: {integrity: sha512-F3asv42UuXchdzt+xXqfW1OGlVBe+mxa2mqI0pg5yAHZPvFmY3Y6drSf/GQ1A86WgWEN9Kzh/WrgKa6iGcHXLg==}
+
+  phonemizer@1.2.1:
+    resolution: {integrity: sha512-v0KJ4mi2T4Q7eJQ0W15Xd4G9k4kICSXE8bpDeJ8jisL4RyJhNWsweKTOi88QXFc4r4LZlz5jVL5lCHhkpdT71A==}
 
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
@@ -2696,6 +2705,8 @@ snapshots:
       lines-and-columns: 1.2.4
 
   pend@1.2.0: {}
+
+  phonemizer@1.2.1: {}
 
   picocolors@1.1.1: {}
 

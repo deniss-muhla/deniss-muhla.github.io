@@ -15,6 +15,15 @@ committed to git. The byte counts below are pinned inventory values, not a total
 - Source: `https://huggingface.co/mixedbread-ai/mxbai-embed-xsmall-v1/resolve/e6ac24e5d6efb8782b59de1647b3ececb4ece94e/`
 - License: Apache-2.0.
 
+## Paradee speech model
+
+`sahilmahendrakar/Paradee-8M-v1.1` at revision
+`330617ad1f097b4f6b02c103e54b39006c090b45`, 3 files, 8,466,709 bytes, served from
+`/models/sahilmahendrakar/Paradee-8M-v1.1/`. The int8 ONNX model is 8,461,438 bytes.
+
+- Source: `https://huggingface.co/sahilmahendrakar/Paradee-8M-v1.1/tree/330617ad1f097b4f6b02c103e54b39006c090b45`
+- License: Apache-2.0.
+
 ## ONNX Runtime Web
 
 Version `1.31.0-dev.20260914-8d85527a0`, the `jsep` pair at `/ort/`
@@ -26,7 +35,7 @@ Project: `https://github.com/microsoft/onnxruntime`.
 
 ## Kitten-generated assistant audio provenance
 
-The v2 assistant corpus was prepared with the pinned local `kittenml` SDK 0.9.4 source
+The former v2 assistant corpus, removed on this branch, was prepared with the pinned local `kittenml` SDK 0.9.4 source
 (commit `8ed679c08e0976b236bd5d0dc4ec9ddd98b0da98`, archive SHA-256 recorded in
 `scripts/cv-audio/kitten-pins.json`; SDK license: Apache-2.0) and the pinned
 `KittenML/kitten-tts-2` model revision `f2eee74f4467855ad58fe16f1fb7b7df473263fd`.
@@ -63,3 +72,11 @@ text is the same 11,358-byte file (sha256 `cfc7749b96f63bd31c3c42b5c471bf7568140
 kept with the downloaded bytes in `~/.cache/cv-assistant/model-assets/` rather than in git.
 Attribution: the runtime and the model are by Cactus-Compute and are used unmodified under that
 license; the site serves its own copies at the routes above and reaches no Cactus-Compute host.
+
+## Paradee phonemization
+
+The runtime uses `phonemizer` 1.2.1 by Xenova, declared Apache-2.0 by its npm package.
+It embeds eSpeak NG-derived code and data; its upstream component terms need independent
+license review before public distribution. The conversion in
+`src/chat/tts/paradee/tokenizer.ts` follows Paradee v1.1 `web/misaki.js` by
+sahilmahendrakar, Apache-2.0. No legal clearance is claimed.

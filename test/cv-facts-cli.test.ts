@@ -499,8 +499,8 @@ test("both build scripts run the offline gate and stop before the bundler on a s
     );
 
     // The gate is only worth asserting if the wiring is the shipping wiring.
-    assert.equal(manifest.scripts.build, "tsc -b && pnpm cv:facts:check && pnpm cv:audio:check && vite build");
-    assert.equal(manifest.scripts["build:site"], "tsc -b && pnpm cv:facts:check && pnpm cv:audio:check && vite build");
+    assert.equal(manifest.scripts.build, "tsc -b && pnpm cv:facts:check && vite build");
+    assert.equal(manifest.scripts["build:site"], "tsc -b && pnpm cv:facts:check && vite build");
     assert.equal(manifest.scripts["cv:facts:check"], "node ./scripts/cv-facts.mjs check");
 
     for (const name of ["build", "build:site"]) {
@@ -510,8 +510,8 @@ test("both build scripts run the offline gate and stop before the bundler on a s
       assert.match(passing.output, /check passed for 1 cards from the reviewed index/);
       assert.deepEqual(
         passing.chain,
-        ["tsc ran", "cv-audio-check ran", "vite ran"],
-        `${name} must run both offline gates between compile and bundle`,
+        ["tsc ran", "vite ran"],
+        `${name} must run the facts gate between compile and bundle`,
       );
 
       // The fault is index level: the index no longer claims the digest of the file beside it.
@@ -531,7 +531,7 @@ test("both build scripts run the offline gate and stop before the bundler on a s
       const restored = runBuildScript(name);
 
       assert.equal(restored.status, 0, restored.output);
-      assert.deepEqual(restored.chain, ["tsc ran", "cv-audio-check ran", "vite ran"]);
+      assert.deepEqual(restored.chain, ["tsc ran", "vite ran"]);
     }
 
     // The regression value of the loop above, shown rather than asserted about. With the gate
