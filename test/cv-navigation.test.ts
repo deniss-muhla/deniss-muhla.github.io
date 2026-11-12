@@ -154,10 +154,12 @@ test("installed fact citations resolve to their canonical CV sections despite sh
   );
   const cases = [
     ["identity-name", null],
-    ["contact-email", null],
-    ["profile-agent-workflows", "Profile"],
-    ["employment-if-p-c-insurance", "IF P&C Insurance |"],
-    ["employment-stream-labs", "Stream Labs |"],
+    ["identity-email", null],
+    ["profile-ai-workflows", "Profile"],
+    ["if-role-period", "IF P&C Insurance |"],
+    ["stream-role-period", "Stream Labs |"],
+    ["geidans-role-period", "Geidans Solutions Latvia |"],
+    ["diatom-role-period", "DiatomEnterprises |"],
     ["technology-front-end", "Technology Stack"],
     ["certificate-mcpd", "Certificates"],
     ["interest-linux", "Interests"],
