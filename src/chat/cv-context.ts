@@ -7,4 +7,4 @@ export const GREETING =
 
 /** Shown in the chat before the conversation starts. */
 export const INTRO =
-  "This assistant runs in your browser. It matches questions to reviewed answers, uses local speech recognition when available, and plays reviewed audio clips for answers. It works offline after the clips have been cached, but it can mishear or oversimplify. Ask about experience, projects or skills by voice or by typing.";
+  "This assistant runs in your browser. It matches questions to reviewed answers, uses local speech recognition when available, and generates speech locally with Paradee. Model downloads are needed on first use, and it can mishear or oversimplify. Ask about experience, projects or skills by voice or by typing.";

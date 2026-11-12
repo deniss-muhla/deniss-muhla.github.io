@@ -22,7 +22,7 @@ Alongside product development, I help teams adopt AI-assisted development workfl
 
 ## Experience
 
-### IF P&C Insurance | Senior Front-end JavaScript Application Developer | Riga | Aug 2021 - Present
+### IF P&C Insurance | Senior Front-end Developer | Riga | Aug 2021 - Present
 
 IF delivers P&C insurance solutions across Scandinavia and the Baltics. I work across customer-facing applications connected by a shared design system.
 

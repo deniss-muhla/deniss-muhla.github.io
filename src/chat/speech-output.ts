@@ -1,5 +1,5 @@
-import { createAnswerAudioPlayer, type PlaybackPause, type AnswerAudioPlayer } from "./answer-audio.ts";
-import type { AssistantClipSequence } from "./audio-catalog.ts";
+import type { PlaybackPause, AnswerAudioPlayer } from "./answer-audio.ts";
+import type { AssistantClipSequence } from "./speech-plan.ts";
 
 const SPEECH_OUTPUT_ERROR = "Speech audio could not be played.";
 
@@ -9,6 +9,7 @@ export type SpeechOutputOptions = {
 };
 
 export interface SpeechOutput {
+  prepare(): Promise<void>;
   speakSequence(sequence: AssistantClipSequence, options?: SpeechOutputOptions): Promise<void>;
   resumeAudio(): Promise<AudioContext>;
   stop(): void;
@@ -25,7 +26,7 @@ type ReferencePlayback = {
   onSpeakingChange?: (speaking: boolean) => void;
 };
 
-export function createSpeechOutput(player: AnswerAudioPlayer = createAnswerAudioPlayer()): SpeechOutput {
+export function createSpeechOutput(player: AnswerAudioPlayer): SpeechOutput {
   let audioContext: AudioContext | null = null;
   let referenceGeneration = 0;
   let referencePlayback: ReferencePlayback | null = null;
@@ -98,5 +99,5 @@ export function createSpeechOutput(player: AnswerAudioPlayer = createAnswerAudio
     }
   };
 
-  return { speakSequence, resumeAudio, stop, pausePlaying: () => player.pausePlaying?.() ?? null };
+  return { prepare: () => player.prepare?.() ?? Promise.resolve(), speakSequence, resumeAudio, stop, pausePlaying: () => player.pausePlaying?.() ?? null };
 }

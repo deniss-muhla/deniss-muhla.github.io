@@ -6,7 +6,7 @@
  * of the answer text: the prepared answer is spoken and read verbatim, and these notes are
  * rendered beside it.
  */
-import { AUDIO_CATALOG_TEXT } from "./audio-catalog.ts";
+import { AUDIO_CATALOG_TEXT } from "./speech-plan.ts";
 import type { Answer, LimitedCause } from "./retrieval/controller.ts";
 
 export type ReplyView =

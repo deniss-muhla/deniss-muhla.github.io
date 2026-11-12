@@ -13,7 +13,7 @@ pnpm dev
 pnpm typecheck
 pnpm lint
 pnpm test                 # browser-free unit tests
-pnpm build                # typecheck, installed facts/audio checks, production build and CV/PDF
+pnpm build                # typecheck, installed facts check, production build and CV/PDF
 pnpm preview:site
 ```
 
@@ -47,10 +47,10 @@ check does not need a shipping framework. Do not duplicate the full CV into test
 - Presentation/controls: `node --test test/page-motion.test.ts test/voicechat-lifecycle.test.ts test/cv-navigation.test.ts`.
   Inspect emitted CSS and actual browser scroll/reverse/resize, keyboard focus and compact layout.
 - Facts shape/source/embedding identity: `pnpm cv:facts:check`; source and whole-index review rules
-  belong to the [facts skill](../.github/skills/cv-facts/SKILL.md).
-- Installed audio identities/bytes/coverage: `pnpm cv:audio:check`; it runs no model and writes nothing.
-  Explicit direct-final generation has model-free coverage; the maintained CLI remains Linux/CUDA only. See the [audio pipeline](audio-pipeline.md#current-command-interface)
-  for prerequisites and the dev serving guard.
+  belong to the [facts skill](../.github/skills/cv-facts/SKILL.md). Perspective cards in
+  `resources/cv/facts.json` are currently authored and reviewed, not generated.
+- Speech uses runtime Paradee. See [manual testing](manual-testing.md) for playback checks and
+  `scripts/macos/assistant-smoke.sh` or `scripts/linux/assistant-smoke.sh` for local smoke checks.
 - Streaming: exercise interim transcripts, several updates before a render and delayed consumption,
   not just a large final value. Keep typed/live selection and cleanup parity under consent.
 - Runtime asset changes: verify both Vite dev and built/static delivery, actual emitted bytes and

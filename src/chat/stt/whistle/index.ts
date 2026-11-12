@@ -93,6 +93,7 @@ export function createWhistleStt(options: WhistleSttOptions = {}): SttTranscribe
   let startPromise: Promise<void> | null = null;
   let stopPromise: Promise<void> | null = null;
   let endingUtterance = false;
+  let decoderActive = false;
   // Acoustic ownership advances before the queued decoder drain. A delayed prior
   // stop still drains its samples, but may no longer commit text or restart output.
   let acousticUtterance = 0;
@@ -153,7 +154,6 @@ export function createWhistleStt(options: WhistleSttOptions = {}): SttTranscribe
         const current = ensureSession();
         acousticUtterance = 0;
         decoderUtterance = 0;
-        current.start();
         const processChunks = createBoundedChunkSender((samples) => current.sendChunk(samples));
         let sendChunks = true;
         let closing = false;
@@ -170,6 +170,7 @@ export function createWhistleStt(options: WhistleSttOptions = {}): SttTranscribe
             if (event.type === "start") {
               decoderUtterance = utterance;
               current.start();
+              decoderActive = true;
             }
             else if (event.type === "chunk") processChunks.push(event.samples);
             else {
@@ -179,6 +180,7 @@ export function createWhistleStt(options: WhistleSttOptions = {}): SttTranscribe
               endingUtterance = true;
               draining = true;
               void current.stop().finally(() => {
+                decoderActive = false;
                 endingUtterance = false;
                 draining = false;
                 drain();
@@ -205,7 +207,7 @@ export function createWhistleStt(options: WhistleSttOptions = {}): SttTranscribe
             onChunk: (samples) => {
               if (!sendChunks) return;
               if (startedGeneration !== generation) {
-                if (closing) processChunks.push(samples);
+                if (closing && decoderActive) processChunks.push(samples);
                 return;
               }
               admission.push(samples);
@@ -256,7 +258,10 @@ export function createWhistleStt(options: WhistleSttOptions = {}): SttTranscribe
           current.flushChunks();
           current.disableChunks();
         }
-        await session?.stop();
+        if (decoderActive) {
+          await session?.stop();
+          decoderActive = false;
+        }
         trace("stt stopped");
       })();
       let activeStop: Promise<void>;

@@ -1,5 +1,5 @@
 import type { PlaybackPause } from "../../answer-audio.ts";
-import { createUtteranceGate, FRAME_MILLISECONDS, latestFrameHasSound, type UtteranceEvent } from "./utterance.ts";
+import { createUtteranceGate, createMinimumVoicedGate, FRAME_MILLISECONDS, latestFrameHasSound, type UtteranceEvent } from "./utterance.ts";
 
 /** Duration trial, not noise classification. Freshness is receipt time, not capture time. */
 export function createPlaybackAdmission(options: {
@@ -11,16 +11,18 @@ export function createPlaybackAdmission(options: {
   onError(): void;
 }) {
   let gate = createUtteranceGate();
+  let minimum = createMinimumVoicedGate();
   let latestAt = -Infinity;
   let latestSound = false;
   let revision = 0;
   let reportedRevision = -1;
-  let held: { revision: number; pause: PlaybackPause; events: UtteranceEvent[]; timer: ReturnType<typeof setTimeout> } | null = null;
+  let held: { revision: number; pause: PlaybackPause; events: UtteranceEvent[]; confirmed: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
 
   const discard = (): void => {
     if (held) clearTimeout(held.timer);
     held = null;
     gate = createUtteranceGate();
+    minimum = createMinimumVoicedGate();
   };
 
   const reportFailure = (candidate: NonNullable<typeof held>): void => {
@@ -29,6 +31,29 @@ export function createPlaybackAdmission(options: {
     reportedRevision = candidate.revision;
     discard();
     options.onError();
+  };
+
+  const release = (candidate: NonNullable<typeof held>, events: UtteranceEvent[]): void => {
+    const admitted = minimum.push(events);
+    if (admitted.some(event => event.type === "start")) {
+      clearTimeout(candidate.timer);
+      held = null;
+      options.onAdmittedStart();
+      options.deliver(admitted);
+    } else if (events.some(event => event.type === "end")) {
+      discard();
+      void candidate.pause.resume().catch(() => reportFailure(candidate));
+    }
+  };
+
+  const refresh = (candidate: NonNullable<typeof held>): void => {
+    clearTimeout(candidate.timer);
+    candidate.timer = setTimeout(() => {
+      if (held !== candidate) return;
+      const resume = options.isCurrent() && candidate.pause.outcome() !== "cancelled";
+      discard();
+      if (resume) void candidate.pause.resume().catch(() => reportFailure(candidate));
+    }, 1000);
   };
 
   const decide = async (candidate: NonNullable<typeof held>): Promise<void> => {
@@ -40,12 +65,12 @@ export function createPlaybackAdmission(options: {
       await candidate.pause.ready;
       if (held !== candidate || !options.isCurrent() || candidate.pause.outcome() === "cancelled") return;
       if (continued) {
-        held = null;
-        options.onAdmittedStart();
-        options.deliver(candidate.events);
+        candidate.confirmed = true;
+        refresh(candidate);
+        const events = candidate.events;
+        candidate.events = [];
+        release(candidate, events);
       } else {
-        // Re-arm admission now: a new question during a delayed native resume must
-        // interrupt immediately, not disappear into the rejected burst buffer.
         discard();
         await candidate.pause.resume();
       }
@@ -68,17 +93,22 @@ export function createPlaybackAdmission(options: {
         options.onOnset();
         const pause = options.pausePlaying();
         if (pause) {
-          const candidate = { revision, pause, events: [...events], timer: setTimeout(() => void decide(candidate), 200) };
+          const candidate = { revision, pause, events: [...events], confirmed: false, timer: setTimeout(() => void decide(candidate), 200) };
           held = candidate;
           void pause.ready.catch(() => {
             reportFailure(candidate);
           });
           return;
         }
-        options.onAdmittedStart();
       }
-      if (held) held.events.push(...events);
-      else options.deliver(events);
+      if (held) {
+        if (held.confirmed) { refresh(held); release(held, events); }
+        else held.events.push(...events);
+      } else {
+        const admitted = minimum.push(events);
+        if (admitted.some(event => event.type === "start")) options.onAdmittedStart();
+        options.deliver(admitted);
+      }
     },
     stop: () => { revision += 1; discard(); },
   };

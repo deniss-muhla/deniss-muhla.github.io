@@ -1,3 +1,6 @@
+import { createParadeeAdapter } from "./tts/paradee/adapter.ts";
+import { rankCards } from "./retrieval/scoring.ts";
+import { rankLiveCards } from "./retrieval/live-ranking.ts";
 /**
  * Browser-local voice engine for the CV assistant.
  *
@@ -5,7 +8,7 @@
  *  - STT: Cactus-Compute Whistle (whistle.cact) through the project-owned adapter in
  *    `src/chat/stt/whistle`, which runs the vendor engine in a Web Worker
  *  - Query embeddings: the pinned retrieval encoder in its own module worker
- *  - Speech output: selected, content-hashed prerecorded answer clips
+ *  - Speech output: locally synthesized Paradee audio
  *
  * Questions go to the retrieval controller, which selects one prepared answer from the
  * reviewed index; nothing here generates an answer or builds a CV prompt.
@@ -17,7 +20,7 @@
 import type { SttTranscriber, TranscriptLine } from "./stt/whistle/index.ts";
 
 import type { AnswerAudioPlayer } from "./answer-audio.ts";
-import type { AssistantClipSequence } from "./audio-catalog.ts";
+import type { AssistantClipSequence } from "./speech-plan.ts";
 import { createSpeechOutput, type SpeechOutput, type SpeechOutputOptions } from "./speech-output.ts";
 import {
   createRetrievalController,
@@ -32,10 +35,11 @@ import {
   type RetrievalEncoder,
 } from "./retrieval/encoder/index.ts";
 import type { ClarificationChoice } from "./retrieval/selection.ts";
+import type { ReviewedIndex } from "./retrieval/index.ts";
 
 export type { Answer, ClarificationChoice, FactTopicChoice };
 
-export type ModelKey = "stt" | "encoder";
+export type ModelKey = "stt" | "encoder" | "paradee";
 export type ModelState = "idle" | "loading" | "ready" | "error";
 export type ModelProgress = Record<ModelKey, number>;
 export type ModelStates = Record<ModelKey, ModelState>;
@@ -91,7 +95,8 @@ export function trace(...args: unknown[]): void {
 /** Progress weights for the two local model downloads shown by the chat. */
 export const PROGRESS_WEIGHTS: Record<ModelKey, number> = {
   stt: 0.2,
-  encoder: 0.8,
+  encoder: 0.6,
+  paradee: 0.2,
 };
 
 export type Capabilities = {
@@ -124,6 +129,8 @@ export async function detectCapabilities(
 export interface VoiceEngineDeps {
   /** Loads the one controller over the one index, on the first topic offer or question. */
   loadController?: () => Promise<RetrievalController>;
+  /** Supplies the live index for isolated tests. */
+  loadReviewedIndex?: () => Promise<ReviewedIndex>;
   /** The query encoder handed to the controller once it is ready. */
   encoder?: RetrievalEncoder;
   /** Overrides the encoder worker so a browser-free test can drive load progress. */
@@ -149,8 +156,8 @@ async function defaultLoadController(): Promise<RetrievalController> {
 }
 
 export class VoiceEngine {
-  readonly progress: ModelProgress = { stt: 0, encoder: 0 };
-  readonly states: ModelStates = { stt: "idle", encoder: "idle" };
+  readonly progress: ModelProgress = { stt: 0, encoder: 0, paradee: 0 };
+  readonly states: ModelStates = { stt: "idle", encoder: "idle", paradee: "idle" };
   capabilities: Capabilities | null = null;
   /** The last persist grant: technical metadata for `?voiceDebug=1`, never rendered. */
   storagePersisted: boolean | null = null;
@@ -176,7 +183,7 @@ export class VoiceEngine {
   constructor(deps: VoiceEngineDeps = {}) {
     this.deps = deps;
     const audioPlayer = deps.audioPlayer?.();
-    this.speechOutput = createSpeechOutput(audioPlayer);
+    this.speechOutput = createSpeechOutput(audioPlayer ?? createParadeeAdapter());
     // Construction is free: no worker exists and no request is made until a load or embed.
     // The default encoder reports the library's own download progress into the model states.
     this.encoder =
@@ -239,7 +246,7 @@ export class VoiceEngine {
       this.capabilities ??= await this.detect();
       // Data saving: no model request before the explicit chat open (design decision 10).
       if (this.capabilities.saveData) return;
-      await this.ensureEncoder().catch(() => undefined);
+      await Promise.all([this.ensureEncoder().catch(() => undefined), this.ensureParadee().catch(() => undefined)]);
     })().finally(() => {
       this.prefetchPromise = null;
     });
@@ -278,11 +285,28 @@ export class VoiceEngine {
     this.requestPersistentStorage();
     if (this.prefetchPromise) return this.prefetchPromise;
 
-    this.prefetchPromise = this.ensureEncoder().catch(() => undefined).finally(() => {
+    this.prefetchPromise = Promise.all([this.ensureEncoder().catch(() => undefined), this.ensureParadee().catch(() => undefined)]).then(() => undefined).finally(() => {
       this.prefetchPromise = null;
     });
 
     return this.prefetchPromise;
+  }
+
+  private paradeePromise: Promise<void> | null = null;
+
+  /** Prepare speech independently of microphone consent and without playing audio. */
+  async ensureParadee(): Promise<void> {
+    if (this.states.paradee === "ready") return;
+    if (this.paradeePromise) return this.paradeePromise;
+    this.setState("paradee", "loading");
+    this.paradeePromise = Promise.resolve().then(() => this.speechOutput.prepare()).then(() => {
+      this.setProgress("paradee", 1);
+      this.setState("paradee", "ready");
+    }).catch((error: unknown) => {
+      this.setState("paradee", "error");
+      throw error;
+    }).finally(() => { this.paradeePromise = null; });
+    return this.paradeePromise;
   }
 
   /** Loads the embedding model for semantic matching; the encoder handle deduplicates the load. */
@@ -433,6 +457,25 @@ export class VoiceEngine {
     options.onDelta?.(answer);
 
     return isCurrent() ? answer : "";
+  }
+
+  async suggest(question: string, semantic = false): Promise<Array<Extract<Answer, { kind: "answer" }>>> {
+    if (!question.trim()) return [];
+    const index = this.deps.loadReviewedIndex
+      ? await this.deps.loadReviewedIndex()
+      : (await (browserReviewedIndex ?? import("./retrieval/reviewed-index.ts"))).reviewedIndex();
+    let scored: ReturnType<typeof rankCards>["scored"] = [];
+    if (semantic && this.encoder.state === "ready") {
+      try { scored = rankCards(index, await this.encoder.embed(question.trim())).scored; } catch { /* Lexical suggestions remain available. */ }
+    }
+    const scores = new Map(scored.map((item) => [item.id, item.score]));
+    const lexical = rankLiveCards(index, question, scores);
+    const semanticCards = scored.filter((item) => item.score >= 0.3).map((item) => index.cards.find((card) => card.id === item.id)!);
+    const candidates = [...lexical, ...semanticCards];
+    const seen = new Set<string>();
+    return candidates.filter((card) => !seen.has(card.id) && !!seen.add(card.id)).slice(0, 3).map((card) => ({
+      kind: "answer" as const, cardId: card.id, topic: card.topic, answer: card.answer, matching: "semantic" as const, weak: false, sourceRefs: card.sourceRefs,
+    }));
   }
 
   /** Loads reviewed topics only: no encoder, microphone or speech-output request. */

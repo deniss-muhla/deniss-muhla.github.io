@@ -18,8 +18,8 @@ public/downloads/*.pdf
 # Disposable model-free isolation-probe fixtures only.
 /.cache/cv-pipeline/probes/
 
-# Pinned macOS CPU runtime and ignored one-off synthesis tooling.
-/.cache/cv-pipeline/runtime/macos-arm64-cpu/
+# Local pipeline runtime cache.
+/.cache/cv-pipeline/runtime/
 
 # Editor directories and files
 /.pi/

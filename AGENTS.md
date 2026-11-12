@@ -59,22 +59,20 @@
 
 ## CV and assistant updates
 
-For a public CV update, follow the [CV-update workflow](.github/skills/cv-update/references/workflow.md):
-edit `resources/cv/source/cv.md`, regenerate the whole facts index directly at
-`resources/cv/facts.json`, then regenerate the complete matching audio corpus directly at
-`public/audio/assistant/`. These are the final artifact paths. Do not create separate candidate,
-stage or backup directories, or add a promotion or move-after-generation step. Preserve independent
-whole-index source review, exact pins, complete-pair checks and an explicit incomplete state on
-failure. Do not serve a mismatched pair. Keep publication, Git staging, commit, push and archive
-outside ordinary local generation authority.
+For a public CV update, follow the [CV-update workflow](.github/skills/cv-update/references/workflow.md).
+Author atomic and perspective cards in `resources/cv/facts.json` from the canonical CV; perspective
+generation is tracked as follow-up task 5.1. Preserve independent whole-index source review and the
+pinned embedding flow: `pnpm cv:facts:embed --final --confirm-reviewed`, then `pnpm cv:facts:check`.
+Use "Denis" in answer prose. Do not create candidate, stage or backup copies. Keep publication,
+Git staging, commit, push and archive outside ordinary local generation authority.
 
-Facts preparation and embedding support `--final` without separate promotion; follow the
-[facts command interface](.github/skills/cv-facts/SKILL.md#current-command-interface).
-Audio supports explicit `--final` generation at the fixed canonical paths with model-free regression
-coverage; follow the [audio command interface](docs/audio-pipeline.md#current-command-interface).
-The current corpus was generated on macOS CPU/bf16 through an approved temporary bridge; the
-maintained CLI remains Linux/CUDA only. Do not claim portable or permanent macOS support or select a fallback. The legacy
-external `--kitten-stage` remains available, but is not the CV-update target.
+The assistant speaks on device with Paradee v1.1 using pinned same-origin assets in
+`scripts/model-assets.mjs`; see [third-party assets](docs/third-party.md). It shows live top-three
+suggestions immediately, ranking keys before topic before answer, and exact before prefix before
+fuzzy matches within each field. Voice capture waits for Paradee preparation; utterances require
+450 ms total voiced audio and at least three transcript letters or digits. It auto-reads a single
+voice candidate after the speech debounce. For local smoke checks see `scripts/linux`, `scripts/macos` and
+`scripts/assistant-smoke.cjs`.
 
 Git recovers committed tracked files, not uncommitted edits. Preserve current owner changes and do
 not create separate backup copies. Keep genuinely private originals and sensitive material outside

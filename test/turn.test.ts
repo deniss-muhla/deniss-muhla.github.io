@@ -15,7 +15,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { Answer, AskOptions, ClarificationChoice } from "../src/chat/engine.ts";
-import { AUDIO_CATALOG_TEXT, type AssistantClipSequence } from "../src/chat/audio-catalog.ts";
+import { AUDIO_CATALOG_TEXT, type AssistantClipSequence } from "../src/chat/speech-plan.ts";
 import type { SpeechOutputOptions } from "../src/chat/speech-output.ts";
 import { GREETING } from "../src/chat/cv-context.ts";
 import {

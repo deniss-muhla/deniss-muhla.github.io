@@ -14,7 +14,7 @@ import test from "node:test";
 
 import type { Answer, VoiceEngine as VoiceEngineInstance } from "../src/chat/engine.ts";
 import type { AnswerAudioPlayer } from "../src/chat/answer-audio.ts";
-import type { AssistantClipSequence } from "../src/chat/audio-catalog.ts";
+import type { AssistantClipSequence } from "../src/chat/speech-plan.ts";
 import {
   createRetrievalController,
   WEAK_MATCH_CUE,
@@ -694,10 +694,10 @@ test("opening does not load speech recognition before live-voice consent", async
   }
 });
 
-test("the engine tracks only STT and retrieval model readiness", () => {
+test("the engine tracks STT, retrieval and speech model readiness", () => {
   const { engine } = setup();
-  assert.deepEqual(Object.keys(engine.states).sort(), ["encoder", "stt"]);
-  assert.deepEqual(Object.keys(engine.progress).sort(), ["encoder", "stt"]);
+  assert.deepEqual(Object.keys(engine.states).sort(), ["encoder", "paradee", "stt"]);
+  assert.deepEqual(Object.keys(engine.progress).sort(), ["encoder", "paradee", "stt"]);
 });
 
 test("the engine exposes no raw-id greeting or answer playback methods", () => {
@@ -1033,5 +1033,5 @@ for (const newer of ["question", "dismiss", "close", "reset"] as const) {
 test("failed starter index loading is safe and leaves the engine model state untouched", async () => {
   const engine = new VoiceEngine({ loadController: async () => { throw new Error("synthetic index unavailable"); } });
   assert.deepEqual(await engine.offerStarters(), []);
-  assert.deepEqual(engine.states, { stt: "idle", encoder: "idle" });
+  assert.deepEqual(engine.states, { stt: "idle", encoder: "idle", paradee: "idle" });
 });

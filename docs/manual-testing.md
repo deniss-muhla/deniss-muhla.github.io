@@ -38,10 +38,11 @@ must never attach to an owner profile or record input by default.
    or fixed readable fallback. At 390px, no horizontal overflow; usable composer and all
    four icon controls have names/tooltips, visible keyboard focus and at least 44px targets.
    Check reduced motion and print in each tested browser; do not infer unsupported results.
-7. **Offline after Ready:** Wait for the accessible completed-audio hint, with shell and
-   needed retrieval/speech model/runtime assets also cached. Disconnect and reload the
-   controlled built root; check typed answers and explicit stored Replay. Partial caching
-   stays labelled incomplete and leaves typing usable. Audio Ready alone is not model Ready.
+7. **Offline with warm assets:** In a controlled built root, allow retrieval, Paradee and the
+   needed speech-recognition assets to finish preparing online. Disconnect and reload, then check
+   suggestions and explicit Replay. In a separate cold-cache profile, check that unavailable
+   offline speech is explained and typing remains usable. Record results for that browser and
+   profile; a prior model load or warm cache does not itself prove full offline readiness.
 
 Keep reports content-free: pass/fail booleans, counts, durations and fixed failure labels,
 not CV/answer/transcript text, screenshots or recordings. Record host/browser, artifact,
@@ -103,9 +104,8 @@ starting any manual Vite server, verify the normal commands cannot violate that 
 - Set `OFFLINE_CHAT_QA_ONLY=1` before loading config; verify no `cv-artifacts` plugin.
 - Create the server with `configFile: false`.
 - Use an external temporary `publicDir` with only `favicon.svg`, `sw.js`, `sw-register.js`.
-- Deny `/public` and `/downloads`, plus `/audio` for STT-only checks. If playback is explicitly
-  approved, allow only the validated manifest and exact content-hashed clips, not arbitrary
-  public-tree paths.
+- Deny `/public`, `/downloads` and `/audio`. Allow only pinned model routes needed by the check,
+  not arbitrary public-tree paths.
 
 For restricted BUILT, verify the same plugin exclusion; use `configFile: false`, `publicDir:
 false`, `copyPublicDir: false` and external output. Copy only those three shell files and serve
@@ -230,20 +230,18 @@ animation removal where browser media tooling works; report unsupported emulatio
 Preserve the local readable black/white chat switch instead of fading text through gray.
 
 At 390px, verify no overflow, composer usability, keyboard Tab focus, names/tooltips and
-44px targets for New chat, play/Replay, Send and voice. Completed audio uses a concise accessible
-hint with no verbose visible count row; active progress and incomplete/error/data-saving/
-offline/retry states remain actionable. The [focused unit command](development.md#choose-checks-for-the-changed-boundary)
-is model-free and does not replace browser/voice/offline acceptance.
+44px targets for New chat, play/Replay, Send and voice. The [focused unit command](development.md#choose-checks-for-the-changed-boundary)
+is model-free and does not replace browser, voice or offline acceptance.
 
-For caching, use the controlled built root, not a DEV widget missing `sw-register.js`.
-Check audio status independently of STT/retrieval model readiness. Confirm actual verified
-counts/bytes progress to the manifest's item count, and completion only after the manifest's
-facts/greeting/catalog hashes match the compiled identity and every hashed clip verifies.
-Caching itself must not start greeting, microphone or autoplay. Data Saver skips warming;
-offline stops new requests and shows incomplete status; reconnection/retry fetch only missing
-clips while retaining valid ones. Ready cannot come from completed jobs alone.
+Use the controlled built root, not a DEV widget missing `sw-register.js`. Paradee synthesizes
+speech on device from model assets; there is no recorded-clip cache or clip retry. Paradee
+preparation verifies and caches its pinned assets beside retrieval prefetch, except when Data
+Saver defers it until opening chat. With network available, observe speech model loading and
+exercise Replay. Check retrieval, speech and speech recognition separately.
 
-After Ready and needed models/shell are cached, close, disconnect and reload through ordinary
-service-worker recovery. Confirm Ready, usable shell, typed retrieval and explicit stored Replay.
-For partial cache, verify missing/unfinished status and usable typing. Older built receipts
-are not final-artifact acceptance. None of these procedures grants publication or legal clearance.
+For an offline experiment, first exercise the required shell, retrieval and speech paths in the
+same browser profile while online. Then disconnect and reload through normal service-worker
+recovery; check typed retrieval and explicit Replay. A previously successful load or warm cache
+is a prerequisite for this experiment, not a guarantee of offline readiness: record actual
+results, including missing assets and whether typing remains usable. Older built receipts are
+not final-artifact acceptance. None of these procedures grants publication or legal clearance.

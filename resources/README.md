@@ -37,18 +37,13 @@ embedding vector. It is generated from `cv/source/cv.md` and from nothing else.
 
 `cv/source/cv.md` stays authoritative. This index never becomes a second source: a CV change means
 regenerating the whole index directly at `cv/facts.json` and source-reviewing every answer, not only
-the cards that look affected. A card text change invalidates it too. The owner-approved sequence is
-to generate the matching complete audio corpus directly at `public/audio/assistant/`; do not create
-a candidate, stage, backup copy, promotion or move-after-generation step.
+the cards that look affected. A card text change invalidates it too. Do not create a candidate,
+stage, backup copy, promotion or move-after-generation step.
 
-Facts preparation and embedding support `--final` without separate promotion; follow the
+Facts preparation and embedding support `--final`; follow the
 [facts command interface](../.github/skills/cv-facts/SKILL.md#current-command-interface).
-Audio supports [explicit direct-final output](../docs/audio-pipeline.md#current-command-interface)
-with model-free coverage. The maintained CLI remains Linux/CUDA only. `pnpm cv:facts:check` checks the
-final index without writing. `pnpm cv:audio:check` validates the currently installed complete pair
-without a model or file writes. Both checks run in `build` and `build:site`. See the
-[CV-update workflow](../.github/skills/cv-update/references/workflow.md) and the
-[audio pipeline](../docs/audio-pipeline.md) for the audio interface and remaining runtime prerequisites.
+`pnpm cv:facts:check` checks the final index without writing and runs in both build commands.
+See the [CV-update workflow](../.github/skills/cv-update/references/workflow.md).
 
 Coverage is recorded as mapped source units plus deliberate omissions. Every extracted unit has at
 least one card drawing on it, and the omissions that remain are recorded with their reasons. A

@@ -18,7 +18,7 @@ import { runInNewContext } from "node:vm";
 import test from "node:test";
 import ts from "typescript";
 
-import { AUDIO_CATALOG_TEXT, type AssistantClipSequence } from "../src/chat/audio-catalog.ts";
+import { AUDIO_CATALOG_TEXT, type AssistantClipSequence } from "../src/chat/speech-plan.ts";
 import { GREETING, INTRO } from "../src/chat/cv-context.ts";
 import { VoiceEngine, type Answer, type AskOptions, type ClarificationChoice } from "../src/chat/engine.ts";
 import { createTurnFlow, type Message } from "../src/chat/turn.ts";
@@ -368,7 +368,6 @@ type VoiceChatMountOptions = {
   captureSttRegistration?: boolean;
   captureGreetingEffect?: boolean;
   traceCalls?: unknown[][];
-  audioCacheState?: string;
 };
 
 function mockElements(tree: unknown): MockElement[] {
@@ -423,7 +422,7 @@ function mountVoiceChat(
     useState: (initial: unknown): [unknown, (next: unknown) => void] => {
       const index = stateCursor++;
       stateSlots[index] ??= { value: initial, isMessageList: Array.isArray(initial) };
-      if (stateSlots[index].isMessageList) messageSlot = index;
+      if (index === 4) messageSlot = index;
       const slot = stateSlots[index];
       return [slot.value, (next) => {
         slot.value = typeof next === "function"
@@ -436,8 +435,11 @@ function mountVoiceChat(
   const styles = new Proxy({} as Record<string, string>, {
     get: (_target, key) => typeof key === "string" ? key : "",
   });
+  voiceEngine.ensureParadee ??= async () => undefined;
   voiceEngine.offerStarters ??= async () => [];
   voiceEngine.dismissStarters ??= () => undefined;
+  voiceEngine.suggest ??= async () => [];
+  voiceEngine.speakSuggestion ??= async () => undefined;
   const modules: Record<string, unknown> = {
     react,
     "react/jsx-runtime": { Fragment, jsx: createElement, jsxs: createElement },
@@ -448,12 +450,6 @@ function mountVoiceChat(
       voiceEngine,
     },
     "./transcript": { mergeTranscript: (left: string, right: string) => [left, right].filter(Boolean).join(" ") },
-    "../offline/audio-cache": {
-      describeAudioCacheProgress: () => "Audio cache status with observed counts",
-      INITIAL_AUDIO_CACHE_PROGRESS: { state: options.audioCacheState ?? "idle", verifiedClips: 0, totalClips: 122, canRetry: false },
-      requestAudioCacheWarm: () => Promise.resolve(),
-      subscribeAudioCacheProgress: () => () => undefined,
-    },
     "./turn": { createTurnFlow },
     "./VoiceChat.module.css": { default: styles },
   };
@@ -469,6 +465,8 @@ function mountVoiceChat(
   runInNewContext(compiled.outputText, {
     exports: module.exports,
     module,
+    setTimeout,
+    clearTimeout,
     require: (specifier: string) => {
       if (!Object.hasOwn(modules, specifier)) throw new Error(`Unexpected component import: ${specifier}`);
       return modules[specifier];
@@ -490,9 +488,9 @@ function mountVoiceChat(
     sttRegistrationEffect();
   };
   const voiceDraftState = () => ({
-    finalized: refSlots[6]?.current,
-    interim: refSlots[7]?.current,
-    activeUserMessage: refSlots[8]?.current,
+    finalized: refSlots[11]?.current,
+    interim: refSlots[12]?.current,
+    activeUserMessage: refSlots[13]?.current,
   });
   const runGreetingEffect = (): void => {
     assert.ok(greetingEffect, "the targeted greeting effect was captured");
@@ -907,7 +905,7 @@ test("opening immediately allows typing during live setup; icon controls and exa
   assert.equal(findElement(chat.render(), (element) => element.props["data-testid"] === "voice-input")?.props.value, "synthetic typed question", "typing is usable before setup completes");
   releaseAudio();
   await settle();
-  assert.equal(spokenPlans.length, 1, "the consented greeting plays once");
+  assert.equal(spokenPlans.length, 0, "typing supersedes the pending greeting");
   const form = findElement(chat.render(), (element) => element.type === "form");
   assert.ok(form);
   (form.props.onSubmit as (event: { preventDefault: () => void }) => void)({ preventDefault: () => undefined });
@@ -915,8 +913,8 @@ test("opening immediately allows typing during live setup; icon controls and exa
 
   const answerMessage = chat.messages().find((message) => message.role === "assistant" && message.text === selected.answer);
   assert.ok(answerMessage?.audioSequence, "typed answers retain their immutable replay plan");
-  assert.equal(spokenPlans.length, 2, "typed answers follow the consented live speech policy");
-  assert.strictEqual(spokenPlans[1], answerMessage.audioSequence);
+  assert.equal(spokenPlans.length, 1, "typed answers follow the consented live speech policy");
+  assert.strictEqual(spokenPlans[0], answerMessage.audioSequence);
   assert.equal(calls.includes("start-listening"), true);
   assert.equal(Object.hasOwn(askCalls[0].options, "speak"), false);
 
@@ -926,8 +924,8 @@ test("opening immediately allows typing during live setup; icon controls and exa
   assert.equal(mockElements(replay).some((e) => e.type === "path" && e.props.d === "m8 5 11 7-11 7z"), true, "replay shows a play triangle");
   (replay.props.onClick as () => void)();
   await settle();
-  assert.equal(spokenPlans.length, 3);
-  assert.strictEqual(spokenPlans[2], answerMessage.audioSequence, "replay passes the exact stored plan");
+  assert.equal(spokenPlans.length, 2);
+  assert.strictEqual(spokenPlans[1], answerMessage.audioSequence, "replay passes the exact stored plan");
   assert.equal(askCalls.length, 1, "replay does not retrieve or select again");
 });
 
@@ -1357,25 +1355,6 @@ test("playback admission failure has a safe output notice, not a recognition not
 });
 
 
-test("completed audio uses a concise accessible hint; incomplete progress and retry stay visible", () => {
-  const engine = {};
-  const ready = mountVoiceChat(componentSourceForTest(), engine, () => undefined, { audioCacheState: "ready" });
-  const readyTree = mockElements(ready.render());
-  const status = readyTree.find(e => e.props["data-testid"] === "voice-audio-cache-status");
-  assert.equal(status?.props.className, "audioCacheReady", "success does not consume a visible status row");
-  assert.equal(status?.props.role, "status");
-  assert.equal(mockElements(status).some(e => e.type === "span" && e.props.children === "Answer audio available offline."), true);
-  assert.equal(readyTree.some(e => e.props.children === "Retry audio download"), false);
-  for (const state of ["downloading", "partial", "skipped-save-data", "offline", "error"]) {
-    const chat = mountVoiceChat(componentSourceForTest(), engine, () => undefined, { audioCacheState: state });
-    const tree = mockElements(chat.render());
-    const visible = tree.find(e => e.props["data-testid"] === "voice-audio-cache-status");
-    assert.equal(visible?.props.className, "audioCacheStatus");
-    assert.equal(tree.some(e => e.props.children === "Retry audio download"), state !== "downloading");
-  }
-});
-
-
 test("master mute remains available while typed Replay is preparing, before actual speech", async () => {
   let finish!: () => void;
   let current!: () => boolean;
@@ -1500,10 +1479,70 @@ function starterComponentHarness(options: {
 }
 
 type SttHandlersForStarterTest = {
+  onUtteranceStart?: () => void;
   onText?: (text: string) => void;
   onLine?: (line: { text: string }) => void;
   onUtteranceEnd?: () => void;
 };
+
+test("active utterance blocks starter, replay and typed send", async () => {
+  const h = starterComponentHarness();
+  await h.open();
+  const initialPlans = h.plans.length;
+  const starter = h.starters()[0];
+  const replay = h.find("voice-replay");
+  assert.ok(starter && replay);
+  h.handlers.current.onUtteranceStart?.();
+  (starter.props.onClick as () => void)();
+  (replay.props.onClick as () => void)();
+  await h.send();
+  assert.equal(h.plans.length, initialPlans);
+  assert.equal(h.counts().asks, 0);
+  assert.deepEqual(h.navigation, []);
+  assert.equal(h.starters().length, 3);
+});
+
+test("active utterance blocks clarification selection", async () => {
+  let handlers: SttHandlersForStarterTest = {};
+  let chosen = 0;
+  const plans: AssistantClipSequence[] = [];
+  const choice = { cardId: "synthetic-choice", topic: "Synthetic choice", score: 0.5 };
+  const engine = {
+    startOnDemand: async () => undefined, resumeAudio: async () => undefined,
+    startListening: async () => undefined, stopListening: async () => undefined,
+    setSttHandlers: (next: SttHandlersForStarterTest) => { handlers = next; },
+    ask: async (_question: string, options: AskOptions) => { options.onResult?.({ kind: "clarify", choices: [choice] }); return AUDIO_CATALOG_TEXT.clarifyPrompt; },
+    chooseClarification: () => { chosen++; return null; },
+    interrupt: () => undefined, stopAudio: () => undefined,
+    speakSequence: async (sequence: AssistantClipSequence) => { plans.push(sequence); },
+  };
+  const chat = mountVoiceChat(componentSourceForTest(), engine, () => undefined, { captureSttRegistration: true });
+  const find = (id: string) => mockElements(chat.render()).find((e) => e.props["data-testid"] === id);
+  (find("voice-fab")!.props.onClick as () => void)();
+  await settle(); chat.render(); chat.runSttRegistrationEffect();
+  (find("voice-input")!.props.onChange as (e: unknown) => void)({ target: { value: "question" } });
+  const form = mockElements(chat.render()).find((e) => e.type === "form")!;
+  (form.props.onSubmit as (e: unknown) => void)({ preventDefault() {} });
+  await settle();
+  const button = find("voice-choice");
+  assert.ok(button);
+  handlers.onUtteranceStart?.();
+  const before = plans.length;
+  (button.props.onClick as () => void)();
+  await settle();
+  assert.equal(chosen, 0);
+  assert.equal(plans.length, before);
+});
+
+test("utterance blocks an asynchronously starting greeting", async () => {
+  let finish!: () => void;
+  const h = starterComponentHarness({ startListening: () => new Promise<void>((resolve) => { finish = resolve; }) });
+  await h.open();
+  h.handlers.current.onUtteranceStart?.();
+  finish();
+  await settle();
+  assert.equal(h.plans.length, 0);
+});
 
 test("starter offer stays stable through render, greeting, mute and unchanged reopen; muted New chat resamples", async () => {
   const h = starterComponentHarness();
@@ -1653,3 +1692,230 @@ for (const available of ["empty", "failed"] as const) {
     assert.equal(h.chat.messages().some((message) => message.role === "user" && message.text === "calendar scheduling"), true);
   });
 }
+
+test("live typed suggestions use selected-answer navigation and replay, and cancel on input", async () => {
+  const spoken: AssistantClipSequence[] = [];
+  const navigation: SourceRefs[] = [];
+  let stops = 0;
+  const engine = {
+    startOnDemand: async () => undefined,
+    resumeAudio: async () => { throw new Error("no microphone"); },
+    stopListening: async () => undefined,
+    interrupt: () => undefined,
+    stopAudio: () => { stops++; },
+    offerStarters: async () => [{ cardId: "starter", topic: "Starter" }],
+    suggest: async () => [1, 2, 3].map((n) => ({ kind: "answer" as const, matching: "semantic" as const, weak: false, cardId: `card-${n}`, topic: `Topic ${n}`, answer: `Answer ${n}`, sourceRefs: [{ startLine: n, endLine: n }] })),
+    speakSequence: async (sequence: AssistantClipSequence) => { spoken.push(sequence); },
+  };
+  const chat = mountVoiceChat(componentSourceForTest(), engine, (refs) => navigation.push(refs), { captureGreetingEffect: true });
+  const find = (id: string) => mockElements(chat.render()).find((e) => e.props["data-testid"] === id);
+  (find("voice-fab")!.props.onClick as () => void)();
+  chat.render();
+  chat.runGreetingEffect();
+  await settle();
+  const starterClass = find("voice-starter")?.props.className;
+  assert.ok(starterClass);
+  (find("voice-input")!.props.onChange as (e: unknown) => void)({ target: { value: "question" } });
+  await settle();
+  assert.equal(mockElements(chat.render()).filter(e => e.props["data-testid"] === "live-suggestion").length, 3, "suggestions render before the speech debounce");
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  const elements = mockElements(chat.render());
+  const options = elements.filter(e => e.props["data-testid"] === "live-suggestion");
+  assert.equal(options.length, 3);
+  for (const option of options) assert.equal(option.props.className, starterClass);
+  (options[0].props.onClick as () => void)();
+  await settle();
+  assert.deepEqual(spoken, [], "unapproved audio does not auto-play");
+  const selected = chat.messages().find((message) => message.text === "Answer 1");
+  assert.equal(selected?.selectedCardId, "card-1");
+  assert.deepEqual(navigation, [[{ startLine: 1, endLine: 1 }]]);
+  assert.ok(selected?.audioSequence);
+  const replay = mockElements(chat.render()).filter(e => e.props["data-testid"] === "voice-replay").at(-1);
+  (replay!.props.onClick as () => void)();
+  await settle();
+  assert.strictEqual(spoken[0], selected.audioSequence);
+  (find("voice-input")!.props.onChange as (e: unknown) => void)({ target: { value: "new" } });
+  assert.ok(stops > 0);
+  assert.equal(mockElements(chat.render()).filter(e => e.props["data-testid"] === "live-suggestion").length, 0);
+  (find("voice-fab")!.props.onClick as () => void)();
+});
+
+test("one voice candidate selects, navigates and speaks only after utterance end", async () => {
+  const spoken: AssistantClipSequence[] = [];
+  const navigation: SourceRefs[] = [];
+  let count = 1;
+  let handlers: SttHandlersForStarterTest = {};
+  const engine = {
+    startOnDemand: async () => undefined,
+    resumeAudio: async () => undefined,
+    startListening: async () => undefined,
+    stopListening: async () => undefined,
+    setSttHandlers: (next: SttHandlersForStarterTest) => { handlers = next; },
+    interrupt: () => undefined,
+    stopAudio: () => undefined,
+    speakSequence: async (sequence: AssistantClipSequence) => { spoken.push(sequence); },
+    suggest: async () => Array.from({ length: count }, (_, n) => ({ kind: "answer" as const, matching: "semantic" as const, weak: false, cardId: `${n}`, topic: `Topic ${n}`, answer: `Answer ${n}`, sourceRefs: [{ startLine: 10 + n, endLine: 10 + n }] })),
+  };
+  const chat = mountVoiceChat(componentSourceForTest(), engine, (refs) => navigation.push(refs), { captureSttRegistration: true });
+  const find = (id: string) => mockElements(chat.render()).find((e) => e.props["data-testid"] === id);
+  (find("voice-fab")!.props.onClick as () => void)();
+  await settle(); chat.render(); chat.runSttRegistrationEffect();
+  spoken.length = 0;
+  handlers.onText?.("example");
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  assert.deepEqual(spoken, []);
+  const interim = find("live-suggestion")!;
+  assert.equal(interim.props.disabled, true);
+  (interim.props.onClick as () => void)();
+  assert.equal(chat.messages().some(message => message.text === "Answer 0"), false);
+  handlers.onUtteranceEnd?.();
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  const selected = chat.messages().find(message => message.text === "Answer 0");
+  assert.equal(selected?.selectedCardId, "0");
+  assert.deepEqual(navigation, [[{ startLine: 10, endLine: 10 }]]);
+  assert.strictEqual(spoken[0], selected?.audioSequence);
+  const replay = mockElements(chat.render()).filter(e => e.props["data-testid"] === "voice-replay").at(-1);
+  (replay!.props.onClick as () => void)();
+  await settle();
+  assert.strictEqual(spoken[1], selected?.audioSequence);
+  count = 2;
+  handlers.onText?.("another");
+  handlers.onUtteranceEnd?.();
+  await new Promise((resolve) => setTimeout(resolve, 450));
+  assert.equal(spoken.length, 2, "multiple voice candidates do not auto-play");
+  (find("voice-fab")!.props.onClick as () => void)();
+});
+
+test("new typing supersedes an in-flight answer before it can render, navigate or speak", async () => {
+  const spoken: AssistantClipSequence[] = [];
+  const navigation: SourceRefs[] = [];
+  let finish!: (value: string) => void;
+  let options: AskOptions = {};
+  const answer: Extract<Answer, { kind: "answer" }> = {
+    kind: "answer", cardId: "delayed", topic: "Delayed", answer: "Delayed answer.",
+    matching: "semantic", weak: false, sourceRefs: [{ startLine: 20, endLine: 20 }],
+  };
+  const engine = {
+    startOnDemand: async () => undefined,
+    resumeAudio: async () => undefined,
+    startListening: async () => undefined,
+    stopListening: async () => undefined,
+    interrupt: () => undefined,
+    stopAudio: () => undefined,
+    speakSequence: async (sequence: AssistantClipSequence) => { spoken.push(sequence); },
+    ask: (_question: string, next: AskOptions) => {
+      options = next;
+      return new Promise<string>((resolve) => { finish = resolve; });
+    },
+  };
+  const chat = mountVoiceChat(componentSourceForTest(), engine, (refs) => navigation.push(refs));
+  const find = (id: string) => mockElements(chat.render()).find((e) => e.props["data-testid"] === id);
+  (find("voice-fab")!.props.onClick as () => void)();
+  await settle();
+  spoken.length = 0;
+  (find("voice-input")!.props.onChange as (e: unknown) => void)({ target: { value: "first question" } });
+  const form = mockElements(chat.render()).find(e => e.type === "form")!;
+  (form.props.onSubmit as (e: unknown) => void)({ preventDefault: () => undefined });
+  await settle();
+  assert.equal(options.isCurrent?.(), true);
+  (find("voice-input")!.props.onChange as (e: unknown) => void)({ target: { value: "next question" } });
+  assert.equal(options.isCurrent?.(), false);
+  options.onResult?.(answer);
+  options.onDelta?.(answer.answer);
+  finish(answer.answer);
+  await settle();
+  assert.equal(chat.messages().some(message => message.text === answer.answer), false);
+  assert.deepEqual(navigation, []);
+  assert.deepEqual(spoken, []);
+  (find("voice-fab")!.props.onClick as () => void)();
+});
+
+test("voice startup awaits Paradee readiness before capture and greeting", async () => {
+  let release!: () => void;
+  const ready = new Promise<void>(resolve => { release = resolve; });
+  const events: string[] = [];
+  const engine = {
+    startOnDemand: async () => undefined,
+    resumeAudio: async () => { events.push("audio"); },
+    ensureParadee: async () => { events.push("prepare"); await ready; },
+    startListening: async () => { events.push("capture"); },
+    stopListening: async () => undefined,
+    setSttHandlers: () => undefined,
+    interrupt: () => undefined, stopAudio: () => undefined,
+    speakSequence: async () => { events.push("greeting"); },
+  };
+  const chat = mountVoiceChat(componentSourceForTest(), engine, () => undefined);
+  const find = (id: string) => mockElements(chat.render()).find(e => e.props["data-testid"] === id);
+  (find("voice-fab")!.props.onClick as () => void)();
+  await settle();
+  assert.deepEqual(events, ["audio", "prepare"]);
+  assert.ok(find("voice-input"), "typing remains available while preparing");
+  release(); await settle();
+  assert.deepEqual(events, ["audio", "prepare", "capture", "greeting"]);
+  (find("voice-fab")!.props.onClick as () => void)();
+});
+
+test("unavailable Paradee reports speech failure and leaves typing available", async () => {
+  let captures = 0, played = 0;
+  const engine = {
+    startOnDemand: async () => undefined, resumeAudio: async () => undefined,
+    ensureParadee: async () => { throw new Error("private model details"); },
+    startListening: async () => { captures++; }, stopListening: async () => undefined,
+    setSttHandlers: () => undefined, interrupt: () => undefined, stopAudio: () => undefined,
+    speakSequence: async () => { played++; },
+  };
+  const chat = mountVoiceChat(componentSourceForTest(), engine, () => undefined);
+  const find = (id: string) => mockElements(chat.render()).find(e => e.props["data-testid"] === id);
+  (find("voice-fab")!.props.onClick as () => void)(); await settle();
+  assert.ok(find("voice-input"));
+  assert.match(JSON.stringify(chat.render()), /Speech is unavailable/);
+  assert.equal(captures, 0); assert.equal(played, 0);
+  (find("voice-fab")!.props.onClick as () => void)();
+});
+
+test("short voice transcripts are discarded silently while two-word entries are accepted", async () => {
+  let handlers: SttHandlersForStarterTest = {};
+  let suggestions = 0, spoken = 0;
+  const engine = {
+    startOnDemand: async () => undefined, resumeAudio: async () => undefined,
+    startListening: async () => undefined, stopListening: async () => undefined,
+    setSttHandlers: (next: SttHandlersForStarterTest) => { handlers = next; },
+    interrupt: () => undefined, stopAudio: () => undefined,
+    speakSequence: async () => { spoken++; },
+    suggest: async () => { suggestions++; return []; },
+  };
+  const chat = mountVoiceChat(componentSourceForTest(), engine, () => undefined, { captureSttRegistration: true });
+  const find = (id: string) => mockElements(chat.render()).find(e => e.props["data-testid"] === id);
+  (find("voice-fab")!.props.onClick as () => void)(); await settle(); chat.render(); chat.runSttRegistrationEffect();
+  spoken = 0;
+  handlers.onUtteranceStart?.(); handlers.onText?.("a!"); handlers.onUtteranceEnd?.(); await settle();
+  assert.equal(chat.messages().some(m => m.role === "user"), false);
+  assert.equal(suggestions, 0); assert.equal(spoken, 0);
+  handlers.onUtteranceStart?.(); handlers.onText?.("go on"); handlers.onUtteranceEnd?.(); await settle();
+  assert.ok(chat.messages().some(m => m.role === "user" && m.text === "go on" && !m.pending));
+  assert.ok(suggestions > 0);
+  await new Promise(resolve => setTimeout(resolve, 450));
+  await settle();
+  assert.match(JSON.stringify(chat.render()), /No entry matched that question/);
+  (find("voice-fab")!.props.onClick as () => void)();
+});
+
+test("short typed queries show live suggestions while short voice transcripts do not", async () => {
+  const queries: string[] = [];
+  let handlers: { onText?: (text: string) => void } = {};
+  const engine = {
+    startOnDemand: async () => {}, resumeAudio: async () => {}, startListening: async () => {},
+    stopListening: async () => {}, stopAudio: () => {}, interrupt: () => {},
+    setSttHandlers: (next: typeof handlers) => { handlers = next; },
+    suggest: async (text: string) => { queries.push(text); return [{ cardId: "ai", topic: "AI", answer: "AI answer" }]; },
+  };
+  const chat = mountVoiceChat(componentSourceForTest(), engine, () => {}, { captureSttRegistration: true });
+  const find = (id: string) => mockElements(chat.render()).find(e => e.props["data-testid"] === id);
+  (find("voice-fab")!.props.onClick as () => void)(); await settle();
+  chat.runSttRegistrationEffect();
+  handlers.onText?.("AI"); await settle(); assert.deepEqual(queries, []);
+  (find("voice-input")!.props.onChange as (e: unknown) => void)({ target: { value: "AI" } });
+  await settle(); assert.deepEqual(queries, ["AI"]);
+  assert.ok(find("live-suggestion"));
+  (find("voice-fab")!.props.onClick as () => void)();
+});

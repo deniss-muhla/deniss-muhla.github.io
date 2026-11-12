@@ -13,13 +13,6 @@ import {
 } from "./engine";
 import { mergeTranscript } from "./transcript";
 import {
-  describeAudioCacheProgress,
-  INITIAL_AUDIO_CACHE_PROGRESS,
-  requestAudioCacheWarm,
-  subscribeAudioCacheProgress,
-  type AudioCacheProgress,
-} from "../offline/audio-cache";
-import {
   createTurnFlow,
   type Message,
   type MessageRole,
@@ -42,17 +35,58 @@ function formatPercent(value: number): string {
 
 export function VoiceChat({ onAnswer }: VoiceChatProps) {
   const [open, setOpen] = useState(false);
-  const [progress, setProgress] = useState<ModelProgress>({ stt: 0, encoder: 0 });
+  const [progress, setProgress] = useState<ModelProgress>({ stt: 0, encoder: 0, paradee: 0 });
   const [states, setStates] = useState<ModelStates>({
     stt: "idle",
     encoder: "idle",
+    paradee: "idle",
   });
   const [turn, setTurn] = useState<TurnState>("idle");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [suggestions, setSuggestions] = useState<SelectedAnswer[]>([]);
+  const utteranceActiveRef = useRef(false);
+  const selectSuggestionRef = useRef<(answer: SelectedAnswer) => void>(() => undefined);
+  const suggestionRevision = useRef(0);
+  const suggestionIsVoice = useRef(false);
+  const suggestionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const clearSuggestions = useCallback(() => {
+    suggestionRevision.current++;
+    if (suggestionTimer.current !== null) clearTimeout(suggestionTimer.current);
+    suggestionTimer.current = null;
+    voiceEngine.stopAudio();
+    setSuggestions([]);
+  }, []);
+  const updateSuggestions = useCallback((text: string, voiceFinished = false, voice = false) => {
+    clearSuggestions();
+    suggestionIsVoice.current = voice;
+    const revision = suggestionRevision.current;
+    if (voice && (text.match(/[\p{L}\p{N}]/gu) ?? []).length < 3) return;
+    const initial = voiceEngine.suggest(text);
+    void initial.then((items) => {
+      if (revision === suggestionRevision.current && openRef.current) setSuggestions(items);
+    }).catch(() => {
+      if (revision === suggestionRevision.current && openRef.current) setNotice("Suggestions or Paradee speech could not be loaded. Please try again.");
+    });
+    suggestionTimer.current = setTimeout(() => {
+      void initial.then((items) => {
+        if (revision !== suggestionRevision.current || !openRef.current) return;
+        if (voiceFinished && !utteranceActiveRef.current && items.length === 1 && audioApprovedRef.current && !mutedRef.current) {
+          selectSuggestionRef.current(items[0]);
+          return;
+        }
+        void voiceEngine.suggest(text, true).then((ranked) => {
+          if (revision === suggestionRevision.current && openRef.current) {
+            setSuggestions(ranked);
+            if (voiceFinished && ranked.length === 0) setNotice("No entry matched that question. Try rephrasing it.");
+          }
+        }).catch(() => undefined);
+      }).catch(() => undefined);
+    }, 400);
+  }, [clearSuggestions]);
+
   const [blink, setBlink] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [audioCacheProgress, setAudioCacheProgress] = useState<AudioCacheProgress>(INITIAL_AUDIO_CACHE_PROGRESS);
   const [asked, setAsked] = useState(false);
   const [audioApproved, setAudioApproved] = useState(false);
   const [voiceMode, setVoiceMode] = useState<VoiceMode>("typed");
@@ -99,9 +133,9 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
     ),
     [progress],
   );
-  const loading = states.encoder === "loading" || (voiceMode === "live" && states.stt === "loading");
-  const ready = states.encoder === "ready";
-  const ringProgress = voiceMode === "live" ? overall : progress.encoder;
+  const loading = states.encoder === "loading" || states.paradee === "loading" || (voiceMode === "live" && states.stt === "loading");
+  const ready = states.encoder === "ready" && states.paradee === "ready" && (voiceMode !== "live" || states.stt === "ready");
+  const ringProgress = voiceMode === "live" ? overall : (progress.encoder + progress.paradee) / 2;
 
   const appendMessage = useCallback((
     role: MessageRole,
@@ -171,11 +205,24 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
     setChoices,
     setRetryOf,
     setNotice,
-    canSpeak: () => openRef.current && audioApprovedRef.current && !mutedRef.current,
-    canReplay: () => openRef.current && !mutedRef.current,
+    canSpeak: () => openRef.current && audioApprovedRef.current && !mutedRef.current && !utteranceActiveRef.current,
+    canReplay: () => openRef.current && !mutedRef.current && !utteranceActiveRef.current,
     resetTurnText,
   });
   const flow = flowRef.current;
+  selectSuggestionRef.current = (answer) => {
+    if (!openRef.current || utteranceActiveRef.current) return;
+    clearSuggestions();
+    if (!suggestionIsVoice.current && input.trim()) {
+      appendMessage("user", input.trim());
+      setInput("");
+    }
+    setAsked(true);
+    setChoices(null);
+    setRetryOf(null);
+    dismissStarters();
+    flow.appendSelectedAnswer(answer);
+  };
   const showGreetingWithStarters = useCallback(() => {
     setGreetingMessageId(flow.showGreeting(GREETING));
     const request = ++starterRequestRef.current;
@@ -190,7 +237,7 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
   }, [flow]);
 
   const handleReplay = useCallback(async (sequence: NonNullable<Message["audioSequence"]>) => {
-    if (mutedRef.current || !openRef.current) return;
+    if (mutedRef.current || !openRef.current || utteranceActiveRef.current) return;
     setReplaying(true);
     const playback = flow.replay(sequence);
     const revision = revisionRef.current;
@@ -205,6 +252,7 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
    * spoken output any other answer would get. */
   const handleChoice = useCallback(
     (cardId: string) => {
+      if (utteranceActiveRef.current) return;
       setReplaying(false);
       setChoices(null);
       setRetryOf(null);
@@ -225,17 +273,21 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
   );
 
   const handleRetry = useCallback(() => {
-    if (retryOf === null) return;
+    if (retryOf === null || utteranceActiveRef.current) return;
     // The same supersede as a typed send, then re-ask through the flow.
     setReplaying(false);
     flow.retry(retryOf);
   }, [flow, retryOf]);
 
   const commitPendingTurn = useCallback(() => {
+    utteranceActiveRef.current = false;
     if (!openRef.current || voiceModeRef.current !== "live" || mutedRef.current) return;
     const question = currentTurnText().trim();
-    if (!question) {
+    if ((question.match(/[\p{L}\p{N}]/gu) ?? []).length < 3) {
       resetTurnText();
+      clearSuggestions();
+      if (activeUserMessageRef.current !== null) removeMessage(activeUserMessageRef.current);
+      activeUserMessageRef.current = null;
       return;
     }
 
@@ -249,22 +301,24 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
       updateMessage(userMessageId, { text: question, pending: false });
     }
 
-    void flow.respond(question);
-  }, [currentTurnText, dismissStarters, flow, resetTurnText, updateMessage]);
+    updateSuggestions(question, true, true);
+  }, [clearSuggestions, currentTurnText, dismissStarters, removeMessage, resetTurnText, updateMessage, updateSuggestions]);
 
   const handleSend = useCallback(
     (event: FormEvent) => {
       event.preventDefault();
+      if (utteranceActiveRef.current) return;
       const question = input.trim();
       if (!question) return;
 
       setReplaying(false);
       setInput("");
+      clearSuggestions();
       setAsked(true);
       dismissStarters();
       flow.send(question);
     },
-    [dismissStarters, flow, input],
+    [clearSuggestions, dismissStarters, flow, input],
   );
 
   // Wire speech recognition callbacks once; they read refs so they stay stable.
@@ -275,15 +329,19 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
         // Cancel an awaited greeting separately from the microphone generation: capture
         // stays live so the utterance that caused this event can become the next question.
         greetingStartRef.current += 1;
+        utteranceActiveRef.current = true;
+        clearSuggestions();
         settlePendingVoiceDraft();
         stopAssistantWork();
         setTurn((current) => (current === "error" ? current : "listening"));
       },
       onText: (text) => {
         if (!openRef.current || voiceModeRef.current !== "live" || mutedRef.current) return;
+        utteranceActiveRef.current = true;
         const trimmed = text.trim();
         if (trimmed) dismissStarters();
         interimTurnRef.current = trimmed;
+        updateSuggestions(currentTurnText(), false, true);
         const combined = currentTurnText();
         if (combined) renderTurnBubble(combined);
         else if (activeUserMessageRef.current !== null) {
@@ -293,6 +351,7 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
       },
       onLine: (line) => {
         if (!openRef.current || voiceModeRef.current !== "live" || mutedRef.current) return;
+        utteranceActiveRef.current = true;
         const trimmed = line.text.trim();
         if (!trimmed) return;
         dismissStarters();
@@ -304,6 +363,7 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
         finalizedTurnRef.current = mergeTranscript(finalizedTurnRef.current, trimmed);
         interimTurnRef.current = "";
         renderTurnBubble(currentTurnText());
+        updateSuggestions(currentTurnText(), false, true);
       },
       onUtteranceEnd: commitPendingTurn,
       onWarning: (message) => {
@@ -321,7 +381,7 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
         setTurn("error");
       },
     });
-  }, [commitPendingTurn, currentTurnText, dismissStarters, removeMessage, renderTurnBubble, settlePendingVoiceDraft, stopAssistantWork]);
+  }, [commitPendingTurn, currentTurnText, dismissStarters, removeMessage, renderTurnBubble, clearSuggestions, settlePendingVoiceDraft, stopAssistantWork, updateSuggestions]);
 
   // Subscribe to model progress and prefetch models once the page is idle.
   useEffect(() => {
@@ -400,12 +460,14 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
       // The opener or explicit voice enable is the consent boundary for audio and STT loading.
       await voiceEngine.resumeAudio();
       if (!isCurrent()) return;
+      await voiceEngine.ensureParadee();
+      if (!isCurrent()) return;
       audioApprovedRef.current = true;
       setAudioApproved(true);
       // Keep capture active during playback so confirmed speech can interrupt it.
       // Output supersession cancels startup presentation/greeting, not consented capture.
       await startListening(isCurrent, outputRevision);
-      if (!isCurrent() || greetingStartRef.current !== greetingRequest || revisionRef.current !== outputRevision) return;
+      if (!isCurrent() || utteranceActiveRef.current || greetingStartRef.current !== greetingRequest || revisionRef.current !== outputRevision) return;
       await flow.greet(GREETING);
     } catch {
       if (isCurrent()) {
@@ -413,7 +475,8 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
         setVoiceMode("typed");
         audioApprovedRef.current = false;
         setAudioApproved(false);
-        setNotice("Audio could not start. Try the voice button again, or type a question.");
+        setNotice("Speech is unavailable. Try the voice button again, or type a question.");
+        setTurn("error");
       }
     } finally {
       if (voiceStartRef.current === request) {
@@ -429,6 +492,8 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
       void handleStartVoice();
       return;
     }
+    utteranceActiveRef.current = false;
+    clearSuggestions();
     mutedRef.current = true;
     setMuted(true);
     voiceStartRef.current += 1;
@@ -439,9 +504,11 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
     stopAssistantWork();
     void voiceEngine.stopListening();
     setTurn("listening");
-  }, [handleStartVoice, settlePendingVoiceDraft, stopAssistantWork, replaying, turn]);
+  }, [clearSuggestions, handleStartVoice, settlePendingVoiceDraft, stopAssistantWork, replaying, turn]);
 
   const handleNewChat = useCallback(() => {
+    utteranceActiveRef.current = false;
+    clearSuggestions();
     const request = ++voiceStartRef.current;
     const greetingRequest = ++greetingStartRef.current;
     startingVoiceRef.current = false;
@@ -473,7 +540,7 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
     void (async () => {
       await stopped;
       await startListening(isCurrent, outputRevision);
-      if (isCurrent() && greetingStartRef.current === greetingRequest && revisionRef.current === outputRevision) {
+      if (isCurrent() && !utteranceActiveRef.current && greetingStartRef.current === greetingRequest && revisionRef.current === outputRevision) {
         await flow.greet(GREETING);
       }
     })().finally(() => {
@@ -482,7 +549,7 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
         setStartingVoice(false);
       }
     });
-  }, [flow, resetTurnText, showGreetingWithStarters, startListening]);
+  }, [clearSuggestions, flow, resetTurnText, showGreetingWithStarters, startListening]);
 
   useEffect(() => {
     if (!open) return;
@@ -504,6 +571,8 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
     }
 
     openRef.current = false;
+    utteranceActiveRef.current = false;
+    clearSuggestions();
     starterRequestRef.current += 1;
     setOpen(false);
     voiceStartRef.current += 1;
@@ -521,7 +590,7 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
     setRetryOf(null);
     setNotice(null);
     setTurn("idle");
-  }, [handleStartVoice, settlePendingVoiceDraft, stopAssistantWork]);
+  }, [clearSuggestions, handleStartVoice, settlePendingVoiceDraft, stopAssistantWork]);
 
   useEffect(() => {
     return () => {
@@ -537,31 +606,6 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
   }, [stopAssistantWork]);
 
   useEffect(() => {
-    let active = true;
-    const unsubscribe = subscribeAudioCacheProgress((progress) => {
-      if (active) setAudioCacheProgress(progress);
-    });
-    const requestWarm = () => requestAudioCacheWarm((state) => {
-      if (active) setAudioCacheProgress((current) => ({ ...current, state, canRetry: false }));
-    });
-    const serviceWorker = "serviceWorker" in navigator ? navigator.serviceWorker : null;
-    const connection = (navigator as Navigator & { connection?: EventTarget }).connection;
-    requestWarm();
-    window.addEventListener("online", requestWarm);
-    window.addEventListener("offline", requestWarm);
-    serviceWorker?.addEventListener("controllerchange", requestWarm);
-    connection?.addEventListener("change", requestWarm);
-    return () => {
-      active = false;
-      unsubscribe();
-      window.removeEventListener("online", requestWarm);
-      window.removeEventListener("offline", requestWarm);
-      serviceWorker?.removeEventListener("controllerchange", requestWarm);
-      connection?.removeEventListener("change", requestWarm);
-    };
-  }, []);
-
-  useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
@@ -571,6 +615,10 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
   const showRing = loading || (ringProgress > 0 && ringProgress < 1);
 
   const statusText = (() => {
+    if (states.paradee === "error") return typeof navigator !== "undefined" && !navigator.onLine
+      ? "Speech is unavailable offline. Connect to download the speech model, then reopen chat. You can still type."
+      : "Speech model could not load. Reopen chat to retry; you can still type.";
+    if (states.paradee === "loading") return "Loading speech model. You can type meanwhile.";
     if (muted) return "Voice muted. You can still type a question.";
     if (voiceMode === "typed") {
       if (states.encoder === "loading") return `Loading matching model · ${formatPercent(progress.encoder)}. You can type meanwhile.`;
@@ -597,9 +645,7 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
   })();
 
   const canMuteVoice = !muted && (voiceMode === "live" || startingVoice || replaying || turn === "speaking");
-  const audioCacheText = audioCacheProgress.state === "ready"
-    ? "Answer audio available offline."
-    : describeAudioCacheProgress(audioCacheProgress);
+
 
   return (
     <div className={styles.widget} data-open={open ? "" : undefined}>
@@ -639,14 +685,7 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
           <span className={styles.statusDot} aria-hidden="true" />
           {statusText}
         </p>
-        <div className={audioCacheProgress.state === "ready" ? styles.audioCacheReady : styles.audioCacheStatus} role="status" aria-live="polite" data-testid="voice-audio-cache-status">
-          <span>{audioCacheText}</span>
-          {["partial", "skipped-save-data", "offline", "error"].includes(audioCacheProgress.state) ? (
-            <button type="button" className={styles.audioCacheRetry} onClick={() => requestAudioCacheWarm()}>
-              Retry audio download
-            </button>
-          ) : null}
-        </div>
+
 
         {notice ? <p className={styles.about} role="status">{notice}</p> : null}
 
@@ -656,6 +695,7 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
               {loading
                 ? states.stt === "loading"
                   ? `Loading speech recognition · ${formatPercent(progress.stt)}. You can type meanwhile.`
+                  : states.paradee === "loading" ? "Loading speech model. You can type meanwhile."
                   : `Loading matching model · ${formatPercent(progress.encoder)}. You can type meanwhile.`
                 : INTRO}
             </p>
@@ -733,6 +773,10 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
           </button>
         ) : null}
 
+        {suggestions.length > 0 ? <div className={styles.choices} role="group" aria-label="Closest facts" data-testid="live-suggestions">
+          {suggestions.map((item) => <button type="button" key={item.cardId} className={styles.choice} data-testid="live-suggestion"
+            disabled={utteranceActiveRef.current} onClick={() => selectSuggestionRef.current(item)}>{item.topic}</button>)}
+        </div> : null}
         <form className={styles.composer} onSubmit={handleSend}>
           <button type="button" className={styles.voiceToggle} data-testid="voice-toggle"
             aria-pressed={canMuteVoice} aria-label={canMuteVoice ? "Mute voice" : "Enable live voice"}
@@ -747,7 +791,15 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
             className={styles.input}
             data-testid="voice-input"
             value={input}
-            onChange={(event) => setInput(event.target.value)}
+            onChange={(event) => {
+              greetingStartRef.current += 1;
+              stopAssistantWork();
+              setTurn((current) => (current === "error" ? current : "listening"));
+              setChoices(null);
+              setRetryOf(null);
+              setInput(event.target.value);
+              updateSuggestions(event.target.value);
+            }}
             placeholder="Type a question…"
             aria-label="Type a question"
           />
@@ -765,13 +817,13 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
         data-blink={blink ? "" : undefined}
         onClick={handleToggle}
         aria-expanded={open}
-        aria-label={open ? "Close voice assistant" : `Open voice assistant (microphone and audio). ${audioCacheText}`}
+        aria-label={open ? "Close voice assistant" : "Open voice assistant (microphone and audio)"}
         title={
           !open
-            ? `Open voice assistant (microphone and audio). ${audioCacheText}`
+            ? "Open voice assistant (microphone and audio)"
             : loading
               ? `Loading ${voiceMode === "live" && states.stt === "loading" ? "speech recognition" : "matching model"} · ${formatPercent(ringProgress)}`
-              : audioCacheText
+              : "Close voice assistant"
         }
       >
         <svg className={styles.ring} viewBox="0 0 64 64" aria-hidden="true">
@@ -802,10 +854,6 @@ export function VoiceChat({ onAnswer }: VoiceChatProps) {
 
         {loading && !open ? (
           <span className={styles.progressBadge}>{formatPercent(ringProgress)}</span>
-        ) : !open && audioCacheProgress.state === "downloading" ? (
-          <span className={styles.progressBadge} aria-label={`${audioCacheProgress.verifiedClips} of ${audioCacheProgress.totalClips} audio clips cached`}>
-            {audioCacheProgress.verifiedClips}/{audioCacheProgress.totalClips}
-          </span>
         ) : null}
       </button>
     </div>

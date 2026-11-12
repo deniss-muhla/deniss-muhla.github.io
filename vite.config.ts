@@ -12,8 +12,6 @@ import {
   ORT_RUNTIME_VERSION,
 } from "./src/chat/retrieval/encoder/runtime-assets.ts";
 import { MODEL_ASSETS_CACHE, MODEL_ASSET_SETS } from "./scripts/model-assets.mjs";
-import { createAudioSourceInventory } from "./scripts/cv-audio/catalog.mjs";
-import { createDevPairGuard, createDevPairMiddleware } from "./scripts/cv-audio/serving.mjs";
 
 type CvPipelineModule = {
   ensureCvArtifacts: () => Promise<void>;
@@ -132,8 +130,7 @@ function onnxRuntimeBuildPlugin(): Plugin {
 
 /**
  * The self-hosted model and font assets are served from the external cache in development.
- * Production emits the pinned retrieval, Whistle and font sets. The explicit Kitten stage
- * command uses its external runtime inputs and never loads this site config.
+ * Production emits the pinned retrieval, speech and font sets.
  *
  * `scripts/model-assets.mjs` pins every file (route, bytes, sha256, source, license) and
  * `scripts/fetch-model-assets.mjs` keeps the verified bytes in
@@ -230,44 +227,6 @@ async function loadCvPipeline(): Promise<CvPipelineModule> {
   return (await import(moduleUrl)) as CvPipelineModule;
 }
 
-interface CvAudioSourceIdentity {
-  factsSha256: string;
-  greetingSha256: string;
-  catalogSha256: string;
-}
-
-function cvAudioSourceIdentity(): CvAudioSourceIdentity {
-  if (process.env.OFFLINE_CHAT_QA_ONLY === "1") {
-    throw new Error("The offline QA config must not read the CV audio source identity.");
-  }
-  const facts = readFileSync(resolve(import.meta.dirname, "resources/cv/facts.json"));
-  const inventory = createAudioSourceInventory(facts);
-  return {
-    factsSha256: inventory.factsSha256,
-    greetingSha256: inventory.greetingSha256,
-    catalogSha256: inventory.catalogSha256,
-  };
-}
-
-function cvPairProtectionPlugin(): Plugin {
-  return {
-    name: "cv-pair-protection",
-    apply: "serve",
-    async configureServer(server) {
-      const moduleUrl = pathToFileURL(resolve(import.meta.dirname, "scripts/cv-audio.mjs")).href;
-      const { checkFinalFacts } = await import(moduleUrl) as { checkFinalFacts: () => Promise<unknown> };
-      const assertCompletePair = createDevPairGuard({
-        factsPath: resolve(import.meta.dirname, "resources/cv/facts.json"),
-        audioDirectory: resolve(import.meta.dirname, "public/audio/assistant"),
-        checkFacts: checkFinalFacts,
-      });
-      // Refuse an initially invalid pair, and keep guarding requests after invalidation.
-      await assertCompletePair();
-      server.middlewares.use(createDevPairMiddleware(assertCompletePair));
-    },
-  };
-}
-
 function cvArtifactsPlugin(): Plugin {
   if (process.env.OFFLINE_CHAT_QA_ONLY === "1") {
     throw new Error("The offline QA config must omit the CV artifact plugin before its factory call.");
@@ -296,12 +255,9 @@ export default defineConfig(() => {
   const offlineChatQaOnly = process.env.OFFLINE_CHAT_QA_ONLY === "1";
 
   return {
-  define: offlineChatQaOnly
-    ? {}
-    : { __CV_AUDIO_SOURCE_IDENTITY__: JSON.stringify(cvAudioSourceIdentity()) },
   plugins: [
     react(),
-    ...(offlineChatQaOnly ? [] : [cvPairProtectionPlugin(), cvArtifactsPlugin()]),
+    ...(offlineChatQaOnly ? [] : [cvArtifactsPlugin()]),
     onnxRuntimeServePlugin(),
     onnxRuntimeBuildPlugin(),
     modelAssetsServePlugin(),

@@ -16,20 +16,18 @@ derived from the canonical CV. Keep the index source-qualified and the runtime c
 ## Owner-approved update path
 
 For a CV update, regenerate the whole facts index directly at `resources/cv/facts.json`, review
-every answer against the canonical CV, then generate the complete matching audio directly at
-`public/audio/assistant/`. Do not create a separate candidate, stage, backup copy, promotion or
-move-after-generation step. Follow the [CV-update workflow](../cv-update/references/workflow.md)
-and [public source rules](../../../docs/cv-publication.md).
+every answer against the canonical CV, then embed and check the reviewed index. Do not create a
+separate candidate, stage, backup copy, promotion or move-after-generation step. Follow the
+[CV-update workflow](../cv-update/references/workflow.md) and [public source rules](../../../docs/cv-publication.md).
 
 Facts preparation and embedding support the final path directly. See the [command interface](#current-command-interface)
-below. Audio supports [explicit direct-final output](../../../docs/audio-pipeline.md#current-command-interface)
-with model-free coverage; the maintained CLI remains Linux/CUDA only.
-Do not treat facts support as a completed facts/audio pair.
+below. Atomic and perspective cards are authored and reviewed; perspective generation is tracked
+as follow-up task 5.1.
 
 Start with `pnpm cv:facts:check`. If the existing whole index already has independent source review
 and matches the current source and embedding identity, preserve it rather than redo that work. The
 check writes nothing and runs no inference. It proves neither answer truth nor retrieval quality.
-The site build also checks the facts/audio identities before bundling.
+The site build also checks the facts index before bundling.
 
 ## Answer rules
 
@@ -81,8 +79,7 @@ An offline check does not replace this review.
 A text change to an ID, topic, tags or answer requires fresh source review and embeddings because
 the ordered content digest covers those fields. While authorized answer edits await content review
 and re-embedding, clear each changed card's `vector` to `[]` to mark it pending. Do not hand-edit
-embedding identity or the content digest. This is an incomplete index, not a usable facts/audio
-pair; prior review and checks apply only to their recorded bytes. A `variantGroup` change needs fresh
+embedding identity or the content digest. This is an incomplete index; prior review and checks apply only to their recorded bytes. A `variantGroup` change needs fresh
 review and an offline check, but does not change retrieval text or vectors. A source-reference change needs fresh
 source review and a check; references are not part of the content digest.
 
@@ -108,15 +105,14 @@ Run from the repository root. Generation is explicit, never a build or startup s
    an acknowledgment, not review evidence or owner acceptance.
 5. Run `pnpm cv:facts:check`. It validates source digest, closed shape, source ranges, embedding pins,
    ordered content digest and vectors offline. It does not write or load the embedding runtime.
-   Record the exact final facts SHA-256 for subsequent complete audio generation.
 
-Preparation makes the pair incomplete. Embedding failures leave the pre-embed facts bytes intact;
+
+Preparation makes the index incomplete. Embedding failures leave the pre-embed facts bytes intact;
 invalid authored fields or pins fail before model loading. Source or facts edits during embedding
 abort the write. Writes use an internal sibling temporary file and atomic replacement, not a
 separate candidate, backup directory or later promotion workflow. Canonical files and ancestors
 must be regular, unaliased paths. Other repository targets and repository-contained caches remain
-forbidden. Do not serve the pair until both installed-pair checks pass. Audio generation remains
-blocked on its own adapter/platform prerequisites in the [workflow](../cv-update/references/workflow.md).
+forbidden. Do not serve an incomplete index; run the facts check before serving.
 
 The CLI keeps legacy external operations for compatibility only, not as the CV-update workflow:
 

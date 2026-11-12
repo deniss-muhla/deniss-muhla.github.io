@@ -267,9 +267,6 @@ async function createSafeConfigPlan(safePublicDir, buildDir, scratchContext) {
     buildConfig,
     cvArtifactPluginCounts: { dev: devLoaded.cvArtifactPluginCount, built: buildLoaded.cvArtifactPluginCount },
     qaFlagSetBeforeConfigLoad: devLoaded.qaFlagSetBeforeLoad && buildLoaded.qaFlagSetBeforeLoad,
-    cvAudioSourceIdentitySkipped:
-      !Object.hasOwn(devLoaded.config.define ?? {}, "__CV_AUDIO_SOURCE_IDENTITY__") &&
-      !Object.hasOwn(buildLoaded.config.define ?? {}, "__CV_AUDIO_SOURCE_IDENTITY__"),
   };
 }
 
@@ -715,7 +712,6 @@ async function runSafeConfigPreflight() {
         cvArtifactsAbsent: plan.cvArtifactPluginCounts.dev === 0 &&
           !flattenPlugins(plan.devConfig.plugins).some((plugin) => plugin.name === "cv-artifacts"),
         qaFlagSetBeforeConfigLoad: plan.qaFlagSetBeforeConfigLoad,
-        cvAudioSourceIdentitySkipped: plan.cvAudioSourceIdentitySkipped,
         configFileFalse: plan.devConfig.configFile === false,
         safePublicDirOnly: plan.devConfig.publicDir === safePublicDir &&
           JSON.stringify(publicEntries) === JSON.stringify([...SAFE_SHELL_FILES].sort()),
@@ -729,7 +725,6 @@ async function runSafeConfigPreflight() {
         cvArtifactsAbsent: plan.cvArtifactPluginCounts.built === 0 &&
           !flattenPlugins(plan.buildConfig.plugins).some((plugin) => plugin.name === "cv-artifacts"),
         qaFlagSetBeforeConfigLoad: plan.qaFlagSetBeforeConfigLoad,
-        cvAudioSourceIdentitySkipped: plan.cvAudioSourceIdentitySkipped,
         configFileFalse: plan.buildConfig.configFile === false,
         publicDirFalse: plan.buildConfig.publicDir === false,
         publicCopyFalse: plan.buildConfig.build.copyPublicDir === false,
@@ -749,14 +744,14 @@ async function runSafeConfigPreflight() {
     );
     requireQa(
       evidence.dev.cvArtifactsFound === 0 && evidence.dev.cvArtifactsAbsent &&
-        evidence.dev.qaFlagSetBeforeConfigLoad && evidence.dev.cvAudioSourceIdentitySkipped &&
+        evidence.dev.qaFlagSetBeforeConfigLoad &&
         evidence.dev.configFileFalse && evidence.dev.safePublicDirOnly &&
         evidence.dev.repositoryPublicDenied && evidence.dev.publicRouteGuardInstalled,
       "dev-safe-config-preflight-failed",
     );
     requireQa(
       evidence.built.cvArtifactsFound === 0 && evidence.built.cvArtifactsAbsent &&
-        evidence.built.qaFlagSetBeforeConfigLoad && evidence.built.cvAudioSourceIdentitySkipped &&
+        evidence.built.qaFlagSetBeforeConfigLoad &&
         evidence.built.configFileFalse && evidence.built.publicDirFalse && evidence.built.publicCopyFalse,
       "built-safe-config-preflight-failed",
     );
